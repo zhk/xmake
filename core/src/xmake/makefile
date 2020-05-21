@@ -13,8 +13,9 @@ xmake_CONFIG 			= y
 # core files
 xmake_C_FILES 			+= \
 						xmake \
-						machine \
+						engine \
 						os/argv \
+						os/args \
 						os/find \
 						os/link \
 						os/isdir \
@@ -39,6 +40,7 @@ xmake_C_FILES 			+= \
 						os/cpuinfo \
 						os/readlink \
 						os/emptydir \
+						os/syserror \
 						os/strerror \
 						os/filesize \
 						os/getwinsize \
@@ -80,6 +82,13 @@ xmake_C_FILES 			+= \
 						io/socket_recv \
 						io/socket_recvfrom \
 						io/socket_close \
+						io/pipe_open \
+						io/pipe_openpair \
+						io/pipe_close \
+						io/pipe_read \
+						io/pipe_write \
+						io/pipe_wait \
+						io/pipe_connect \
 						path/relative \
 						path/absolute \
 						path/translate \
@@ -87,13 +96,15 @@ xmake_C_FILES 			+= \
 						hash/uuid4 \
 						hash/sha256 \
 						string/trim \
+						string/split \
+						string/lastof \
 						string/convert \
 						string/endswith \
 						string/startswith \
 						process/open \
 						process/openv \
 						process/wait \
-						process/waitlist \
+						process/kill \
 						process/close \
 						sandbox/interactive \
 						semver/parse \
@@ -105,7 +116,24 @@ xmake_C_FILES 			+= \
 						readline/history_list \
 						readline/add_history \
 						readline/clear_history
-						
+
+iswin =
+ifeq ($(PLAT),windows)
+	iswin = yes
+endif
+ifeq ($(PLAT),msys)
+	iswin = yes
+endif
+ifeq ($(PLAT),cygwin)
+	iswin = yes
+endif
+
+ifdef iswin
+xmake_C_FILES 			+= \
+						winos/ansi \
+						winos/logical_drives \
+						winos/registry_query
+endif
 
 # flags
 xmake_CXFLAGS 			+= -D__tb_prefix__=\"xmake\"

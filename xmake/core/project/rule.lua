@@ -154,6 +154,7 @@ function rule.apis()
         {
             -- rule.set_xxx
             "rule.set_extensions"
+        ,   "rule.set_sourcekinds"
             -- rule.add_xxx
         ,   "rule.add_deps"
         ,   "rule.add_imports"
@@ -210,6 +211,11 @@ function rule:get(name)
     return self._INFO:get(name)
 end
 
+-- get the extra configuration
+function rule:extraconf(name, item, key)
+    return self._INFO:extraconf(name, item, key)
+end
+
 -- get the rule name
 function rule:name()
     return self._NAME
@@ -253,9 +259,9 @@ function rule:script(name, generic)
         -- `@linux|x86_64`
         -- `@macosx,linux`
         -- `android@macosx,linux`
-        -- `android|armv7-a@macosx,linux`
-        -- `android|armv7-a@macosx,linux|x86_64`
-        -- `android|armv7-a@linux|x86_64`
+        -- `android|armeabi-v7a@macosx,linux`
+        -- `android|armeabi-v7a@macosx,linux|x86_64`
+        -- `android|armeabi-v7a@linux|x86_64`
         --
         for _pattern, _script in pairs(script) do
             local hosts = {}

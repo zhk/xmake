@@ -75,12 +75,10 @@ function _wfile(macroname)
     return path.join(path.join(config.directory(), "macros"), macroname .. ".lua")
 end
 
--- list macros
-function _list()
+-- get all macros
+function macros(anonymousname)
 
-    -- trace
-    cprint("${bright}macros:")
-
+    local results = {}
     -- find all macros
     for _, dir in ipairs(_directories()) do
         local macrofiles = os.match(path.join(dir, "*.lua"))
@@ -88,13 +86,27 @@ function _list()
 
             -- get macro name
             local macroname = path.basename(macrofile)
-            if macroname == "anonymous" then
-                macroname = ".<anonymous>"
+
+            if macroname == "anonymous" and anonymousname then
+                macroname = anonymousname
             end
 
-            -- show it
-            print("    " .. macroname)
+            table.insert(results, macroname)
         end
+    end
+    return results
+end
+
+-- list macros
+function _list()
+
+    -- trace
+    cprint("${bright}macros:")
+
+    -- find all macros
+    for _, macroname in ipairs(macros(".<anonymous>")) do
+        -- show it
+        print("    " .. macroname)
     end
 end
 
@@ -130,7 +142,7 @@ function _delete(macroname)
     end
 
     -- trace
-    cprint("${bright}delete macro(%s) ok!", macroname)
+    cprint("${color.success}delete macro(%s) ok!", macroname)
 end
 
 -- import macro
@@ -151,7 +163,7 @@ function _import(macrofile, macroname)
             os.cp(macrofile, _wfile(macroname))
 
             -- trace
-            cprint("${bright}import macro(%s) ok!", macroname)
+            cprint("${color.success}import macro(%s) ok!", macroname)
         end
     else
 
@@ -159,7 +171,7 @@ function _import(macrofile, macroname)
         os.cp(macrofile, _wfile(macroname))
 
         -- trace
-        cprint("${bright}import macro(%s) ok!", macroname)
+        cprint("${color.success}import macro(%s) ok!", macroname)
     end
 end
 
@@ -181,7 +193,7 @@ function _export(macrofile, macroname)
                 os.cp(macrofile, outputdir)
 
                 -- trace
-                cprint("${bright}export macro(%s) ok!", path.basename(macrofile))
+                cprint("${color.success}export macro(%s) ok!", path.basename(macrofile))
             end
         end
     else        
@@ -189,7 +201,7 @@ function _export(macrofile, macroname)
         os.cp(_rfile(macroname), macrofile)
 
         -- trace
-        cprint("${bright}export macro(%s) ok!", macroname)
+        cprint("${color.success}export macro(%s) ok!", macroname)
     end
 end
 
@@ -271,7 +283,7 @@ function _end(macroname)
     _show(macroname)
 
     -- trace
-    cprint("${bright}define macro(%s) ok!", macroname)
+    cprint("${color.success}define macro(%s) ok!", macroname)
 end
 
 -- run macro

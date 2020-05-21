@@ -74,12 +74,13 @@ function _toolchains()
     local ar         = toolchain("the static library archiver")
     local ex         = toolchain("the static library extractor")
     local ranlib     = toolchain("the static library index generator")
+    local strip      = toolchain("the symbols stripper")
     local as         = toolchain("the assember")
     local rc         = toolchain("the rust compiler")
     local rc_ld      = toolchain("the rust linker")
     local rc_sh      = toolchain("the rust shared library linker")
     local rc_ar      = toolchain("the rust static library archiver")
-    local toolchains = {cc = cc, cxx = cxx, cpp = cpp, as = as, ld = ld, sh = sh, ar = ar, ex = ex, ranlib = ranlib, 
+    local toolchains = {cc = cc, cxx = cxx, cpp = cpp, as = as, ld = ld, sh = sh, ar = ar, ex = ex, ranlib = ranlib, strip = strip, 
                         rc = rc, ["rc-ld"] = rc_ld, ["rc-sh"] = rc_sh, ["rc-ar"] = rc_ar}
 
     -- init the c compiler
@@ -95,14 +96,14 @@ function _toolchains()
     as:add({name = "gcc", cross = cross}, "clang")
 
     -- init the linker
-    ld:add({name = "gcc", cross = cross})
     ld:add({name = "g++", cross = cross})
-    ld:add("clang", "clang++")
+    ld:add({name = "gcc", cross = cross})
+    ld:add("clang++", "clang")
 
     -- init the shared library linker
-    sh:add({name = "gcc", cross = cross})
     sh:add({name = "g++", cross = cross})
-    sh:add("clang", "clang++")
+    sh:add({name = "gcc", cross = cross})
+    sh:add("clang++", "clang")
 
     -- init the static library archiver
     ar:add({name = "ar", cross = cross, pathes = gcc_toolchain_bin}, "llvm-ar")
@@ -112,6 +113,9 @@ function _toolchains()
 
     -- init the static library index generator
     ranlib:add({name = "ranlib", cross = cross, pathes = gcc_toolchain_bin}, "ranlib")
+
+    -- init the symbols stripper
+    strip:add({name = "strip", cross = cross, pathes = gcc_toolchain_bin}, "strip")
 
     -- init the rust compiler and linker
     rc:add("$(env RC)", "rustc")
@@ -134,13 +138,13 @@ function main(platform, name)
     else
 
         -- check arch
-        check_arch(config, "armv7-a")
-
-        -- check ndk
-        _check_ndk()
+        check_arch(config, "armeabi-v7a")
 
         -- check android sdk
         _check_android_sdk()
+
+        -- check ndk
+        _check_ndk()
 
         -- check ld and sh, @note toolchains must be initialized after calling check_ndk()
         local toolchains = singleton.get("android.toolchains", _toolchains)

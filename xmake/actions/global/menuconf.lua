@@ -67,6 +67,12 @@ function app:mconfdialog()
     return self._MCONFDIALOG
 end
 
+-- on resize
+function app:on_resize()
+    self:mconfdialog():bounds_set(rect{1, 1, self:width() - 1, self:height() - 1})
+    application.on_resize(self)
+end
+
 -- filter option
 function app:_filter_option(name)
     local options = 
@@ -223,7 +229,6 @@ function app:_global_configs(cache)
         -- choice option? 
         local values = opt.values
         if values then
-            kind = "choice"
             if type(values) == "function" then
                 values = values()
             end
@@ -233,6 +238,9 @@ function app:_global_configs(cache)
                     break
                 end
             end
+        end
+        if values then
+            kind = "choice"
         end
 
         -- get description

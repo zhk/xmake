@@ -21,6 +21,7 @@
 -- imports
 import("core.base.option")
 import("core.base.global")
+import("core.base.process")
 import("core.project.config")
 import("core.package.package")
 import("core.platform.platform")
@@ -53,10 +54,7 @@ function cleanup()
     try
     {
         function ()
-            local proc = process.openv("xmake", argv, {outpath = path.join(os.tmpdir(), "cleaner.log")})
-            if proc ~= nil then
-                proc:close()
-            end
+            process.openv("xmake", argv, {stdout = path.join(os.tmpdir(), "cleaner.log")}, {detach = true}):close()
         end
     }
 end

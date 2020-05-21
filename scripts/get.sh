@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # xmake getter
-# usage: bash <(curl -s <my location>) [[mirror:]branch] [commit/__install_only__]
+# usage: bash <(curl -s <my location>) [branch|__local__|__run__] [commit/__install_only__]
 
 set -o pipefail
 
@@ -14,6 +14,7 @@ if [ 0 -ne "$(id -u)" ]; then
         sudoprefix=
     fi
 else
+    export XMAKE_ROOT=y
     sudoprefix=
 fi
 
@@ -27,37 +28,93 @@ if [ -d $tmpdir ]; then
     rm -rf $tmpdir
 fi
 
+# get make
+if gmake --version >/dev/null 2>&1
+then
+    make=gmake
+else
+    make=make
+fi
+
 remote_get_content() {
     if curl --version >/dev/null 2>&1
     then
-        curl -fsSL "$1"
+        curl -fSL "$1"
     elif wget --version >/dev/null 2>&1
     then
-        wget -q "$1" -O -
+        wget "$1" -O -
     fi
 }
+
+get_host_speed() {
+    if [ `uname` == "Darwin" ]; then
+        ping -c 1 -t 1 $1 2>/dev/null | egrep -o 'time=\d+' | egrep -o "\d+" || echo "65535"
+    else
+        ping -c 1 -W 1 $1 2>/dev/null | egrep -o 'time=\d+' | egrep -o "\d+" || echo "65535"
+    fi
+}
+
+get_fast_host() {
+    speed_gitee=$(get_host_speed "gitee.com")
+    speed_github=$(get_host_speed "github.com")
+    if [ $speed_gitee -le $speed_github ]; then
+        echo "gitee.com" 
+    else
+        echo "github.com"
+    fi
+}
+
+# get branch
+branch=__run__
+if [ x != "x$1" ]; then
+    brancharr=($1)
+    if [ ${#brancharr[@]} -eq 1 ]
+    then
+        branch=${brancharr[0]}
+    fi
+    echo "Branch: $branch"
+fi
+
+# get fasthost and git repository
+if [ 'x__local__' != "x$branch" ]; then
+    fasthost=$(get_fast_host)
+    if [ "$fasthost" == "gitee.com" ]; then
+        gitrepo="https://gitee.com/tboox/xmake.git"
+        gitrepo_raw="https://gitee.com/tboox/xmake/raw/master"
+    else
+        gitrepo="https://github.com/xmake-io/xmake.git"
+        #gitrepo_raw="https://github.com/xmake-io/xmake/raw/master"
+        gitrepo_raw="https://cdn.jsdelivr.net/gh/xmake-io/xmake@master"
+    fi
+fi
 
 if [ "$1" = "__uninstall__" ]
 then
     # uninstall
-    makefile=$(remote_get_content https://github.com/xmake-io/xmake/raw/master/makefile)
+    makefile=$(remote_get_content $gitrepo_raw/makefile)
     while which xmake >/dev/null 2>&1
     do
         pre=$(which xmake | sed 's/\/bin\/xmake$//')
         # don't care if make exists -- if there's no make, how xmake built and installed?
-        echo "$makefile" | make -f - uninstall prefix="$pre" 2>/dev/null || echo "$makefile" | $sudoprefix make -f - uninstall prefix="$pre" || exit $?
+        echo "$makefile" | $make -f - uninstall prefix="$pre" 2>/dev/null || echo "$makefile" | $sudoprefix $make -f - uninstall prefix="$pre" || exit $?
     done
     exit
 fi
 
 # below is installation
 # print a LOGO!
-echo '                         _                      '
-echo '    __  ___ __  __  __ _| | ______              '
-echo '    \ \/ / |  \/  |/ _  | |/ / __ \             '
-echo '     >  <  | \__/ | /_| |   <  ___/             '
-echo '    /_/\_\_|_|  |_|\__ \|_|\_\____| getter      '
-echo '                                                '
+echo 'xmake, A cross-platform build utility based on Lua.   '
+echo 'Copyright (C) 2015-2020 Ruki Wang, tboox.org, xmake.io'
+echo '                         _                            '
+echo '    __  ___ __  __  __ _| | ______                    '
+echo '    \ \/ / |  \/  |/ _  | |/ / __ \                   '
+echo '     >  <  | \__/ | /_| |   <  ___/                   '
+echo '    /_/\_\_|_|  |_|\__ \|_|\_\____|                   '
+echo '                         by ruki, tboox.org           '
+echo '                                                      '
+echo '   👉  Manual: https://xmake.io/#/getting_started     '
+echo '   🙏  Donate: https://xmake.io/#/sponsor             '
+echo '                                                      '
 
 my_exit(){
     rv=$?
@@ -76,14 +133,17 @@ my_exit(){
 }
 test_tools()
 {
-    prog='#include<stdio.h>\n#include<readline/readline.h>\nint main(){readline(0);return 0;}'
+    prog='#include <stdio.h>\n#include <readline/readline.h>\nint main(){readline(0);return 0;}'
     {
         git --version &&
-        make --version &&
+        $make --version &&
         {
             echo -e "$prog" | cc -xc - -o /dev/null -lreadline ||
             echo -e "$prog" | gcc -xc - -o /dev/null -lreadline ||
-            echo -e "$prog" | clang -xc - -o /dev/null -lreadline
+            echo -e "$prog" | clang -xc - -o /dev/null -lreadline ||
+            echo -e "$prog" | cc -xc - -o /dev/null -I/usr/local/include -L/usr/local/lib -lreadline ||
+            echo -e "$prog" | gcc -xc - -o /dev/null -I/usr/local/include -L/usr/local/lib -lreadline ||
+            echo -e "$prog" | clang -xc - -o /dev/null -I/usr/local/include -L/usr/local/lib -lreadline
         }
     } >/dev/null 2>&1
 }
@@ -93,110 +153,85 @@ install_tools()
     { yum --version >/dev/null 2>&1 && $sudoprefix yum install -y git readline-devel ccache && $sudoprefix yum groupinstall -y 'Development Tools'; } ||
     { zypper --version >/dev/null 2>&1 && $sudoprefix zypper --non-interactive install git readline-devel ccache && $sudoprefix zypper --non-interactive install -t pattern devel_C_C++; } ||
     { pacman -V >/dev/null 2>&1 && $sudoprefix pacman -S --noconfirm --needed git base-devel ccache; } ||
-    { pkg list-installed >/dev/null 2>&1 && $sudoprefix pkg install -y git getconf build-essential readline ccache; } ||
+    { pkg list-installed >/dev/null 2>&1 && $sudoprefix pkg install -y git getconf build-essential readline ccache; } || # termux
+    { pkg help >/dev/null 2>&1 && $sudoprefix pkg install -y git readline ccache ncurses; } || # freebsd
     { apk --version >/dev/null 2>&1 && $sudoprefix apk add gcc g++ make readline-dev ncurses-dev libc-dev linux-headers; }
 }
 test_tools || { install_tools && test_tools; } || my_exit "$(echo -e 'Dependencies Installation Fail\nThe getter currently only support these package managers\n\t* apt\n\t* yum\n\t* zypper\n\t* pacman\nPlease install following dependencies manually:\n\t* git\n\t* build essential like `make`, `gcc`, etc\n\t* libreadline-dev (readline-devel)\n\t* ccache (optional)')" 1
-branch=master
-mirror=tboox
-IFS=':'
-if [ x != "x$1" ]; then
-    brancharr=($1)
-    if [ ${#brancharr[@]} -eq 1 ]
-    then
-        branch=${brancharr[0]}
-    fi
-    if [ ${#brancharr[@]} -eq 2 ]
-    then
-        branch=${brancharr[1]}
-        mirror=${brancharr[0]}
-    fi
-    echo "Branch: $branch"
-fi
 projectdir=$tmpdir
-if [ 'x__local__' != "x$branch" ]; then
-    if [ x != "x$2" ]; then
-        git clone --depth=50 -b "$branch" "https://github.com/$mirror/xmake.git" --recursive $projectdir || my_exit "$(echo -e 'Clone Fail\nCheck your network or branch name')"
-        cd $projectdir || my_exit 'Chdir Error'
-        git checkout -qf "$2"
-        cd - || my_exit 'Chdir Error'
-    else 
-        git clone --depth=1 -b "$branch" "https://github.com/$mirror/xmake.git" --recursive $projectdir || my_exit "$(echo -e 'Clone Fail\nCheck your network or branch name')"
-    fi
-else
+if [ 'x__local__' = "x$branch" ]; then
     if [ -d '.git' ]; then
         git submodule update --init --recursive
     fi
     cp -r . $projectdir
     cd $projectdir || my_exit 'Chdir Error'
+elif [ 'x__run__' = "x$branch" ]; then
+    version=$(git ls-remote --tags "$gitrepo" | tail -c 7)
+    if xz --version >/dev/null 2>&1
+    then
+        pack=xz
+    else
+        pack=gz
+    fi
+    mkdir -p $projectdir
+    runfile_url="https://cdn.jsdelivr.net/gh/xmake-mirror/xmake-releases@$version/xmake-$version.$pack.run"
+    echo "downloading $runfile_url .."
+    remote_get_content "$runfile_url" > $projectdir/xmake.run
+    if [[ $? != 0 ]]; then
+        runfile_url="https://github.com/xmake-io/xmake/releases/download/$version/xmake-$version.$pack.run"
+        echo "downloading $runfile_url .."
+        remote_get_content "$runfile_url" > $projectdir/xmake.run
+    fi
+    sh $projectdir/xmake.run --noexec --target $projectdir
+else
+    echo "cloning $gitrepo $branch .."
+    if [ x != "x$2" ]; then
+        git clone --depth=50 -b "$branch" "$gitrepo" --recurse-submodules $projectdir || my_exit "$(echo -e 'Clone Fail\nCheck your network or branch name')"
+        cd $projectdir || my_exit 'Chdir Error'
+        git checkout -qf "$2"
+        cd - || my_exit 'Chdir Error'
+    else 
+        git clone --depth=1 -b "$branch" "$gitrepo" --recurse-submodules $projectdir || my_exit "$(echo -e 'Clone Fail\nCheck your network or branch name')"
+    fi
 fi
 
 # do build
 if [ 'x__install_only__' != "x$2" ]; then
-    make -C $projectdir --no-print-directory build 
+    $make -C $projectdir --no-print-directory build 
     rv=$?
     if [ $rv -ne 0 ]
     then
-        make -C $projectdir/core --no-print-directory error
+        $make -C $projectdir/core --no-print-directory error
         my_exit "$(echo -e 'Build Fail\nDetail:\n' | cat - /tmp/xmake.out)" $rv
     fi
 fi
 
 # make bytecodes
-export XMAKE_PROGRAM_DIR=$projectdir/xmake
+XMAKE_PROGRAM_DIR="$projectdir/xmake" \
 $projectdir/core/src/demo/demo.b l -v private.utils.bcsave --rootname='@programdir' -x 'scripts/**|templates/**' $projectdir/xmake || my_exit 'generate bytecode failed!'
-export XMAKE_PROGRAM_DIR=
 
 # do install
 if [ "$prefix" = "" ]; then
     prefix=~/.local
 fi
 if [ "x$prefix" != x ]; then
-    make -C $projectdir --no-print-directory install prefix="$prefix"|| my_exit 'Install Fail'
+    $make -C $projectdir --no-print-directory install prefix="$prefix"|| my_exit 'Install Fail'
 else
-    $sudoprefix make -C $projectdir --no-print-directory install || my_exit 'Install Fail'
+    $sudoprefix $make -C $projectdir --no-print-directory install || my_exit 'Install Fail'
 fi
 write_profile()
 {
-    grep -sq ".xmake/profile" $1 || echo "[[ -s \"\$HOME/.xmake/profile\" ]] && source \"\$HOME/.xmake/profile\" # load xmake profile" >> $1
+    grep -sq ".xmake/profile" $1 || echo -e "\n[[ -s \"\$HOME/.xmake/profile\" ]] && source \"\$HOME/.xmake/profile\" # load xmake profile" >> $1
 }
 install_profile()
 {
     if [ ! -d ~/.xmake ]; then mkdir ~/.xmake; fi
     echo "export PATH=$prefix/bin:\$PATH" > ~/.xmake/profile
-    echo '
-if   [[ "$SHELL" = */zsh ]]; then
-    # zsh parameter completion for xmake
-
-    _xmake_zsh_complete() 
-    {
-    local completions=("$(XMAKE_SKIP_HISTORY=1 xmake lua private.utils.complete 0 nospace "$words")")
-
-    reply=( "${(ps:\n:)completions}" )
-    }
-
-    compctl -f -S "" -K _xmake_zsh_complete xmake
-
-elif [[ "$SHELL" = */bash ]]; then
-    # bash parameter completion for xmake
-
-    _xmake_bash_complete()
-    {
-    local word=${COMP_WORDS[COMP_CWORD]}
-
-    local completions
-    completions="$(XMAKE_SKIP_HISTORY=1 xmake lua private.utils.complete "${COMP_POINT}" "${COMP_LINE}" 2>/dev/null)"
-    if [ $? -ne 0 ]; then
-        completions=""
+    if [ -f "$projectdir/scripts/register-completions.sh" ]; then
+        cat "$projectdir/scripts/register-completions.sh" >> ~/.xmake/profile
+    else
+        remote_get_content "$gitrepo_raw/scripts/register-completions.sh" >> ~/.xmake/profile
     fi
-
-    COMPREPLY=( $(compgen -W "$completions" -- "$word") )
-    }
-
-    complete -o default -o nospace -F _xmake_bash_complete xmake
-
-fi
-' >> ~/.xmake/profile
 
     if   [[ "$SHELL" = */zsh ]]; then 
         write_profile ~/.zshrc

@@ -25,10 +25,12 @@ import("core.project.config")
 function main(platform)
 
     -- init flags
+    local arm32 = false
     local arch = config.get("arch")
     platform:add("ldflags", "-llog")
     platform:add("shflags", "-llog")
-    if arch and (arch == "armv5te" or arch == "armv7-a") then
+    if arch and (arch == "armeabi" or arch == "armeabi-v7a" or arch == "armv5te" or arch == "armv7-a") then -- armv5te/armv7-a are deprecated
+        arm32 = true
         platform:add("cxflags", "-mthumb")
         platform:add("asflags", "-mthumb")
         platform:add("ldflags", "-mthumb")
@@ -48,12 +50,16 @@ function main(platform)
         -- add target
         local targets = 
         {
-            ["armv5te"]     = "armv5te-none-linux-androideabi"
-        ,   ["armv7-a"]     = "armv7-none-linux-androideabi"
+            ["armv5te"]     = "armv5te-none-linux-androideabi"  -- deprecated
+        ,   ["armeabi"]     = "armv5te-none-linux-androideabi"  -- removed in ndk r17
+        ,   ["armv7-a"]     = "armv7-none-linux-androideabi"    -- deprecated
+        ,   ["armeabi-v7a"] = "armv7-none-linux-androideabi"
         ,   ["arm64-v8a"]   = "aarch64-none-linux-android"
-        ,   ["i386"]        = "i686-none-linux-android"
+        ,   ["i386"]        = "i686-none-linux-android"         -- deprecated
+        ,   ["x86"]         = "i686-none-linux-android"
         ,   ["x86_64"]      = "x86_64-none-linux-android"
-        ,   ["mips"]        = "mipsel-none-linux-android"
+        ,   ["mips"]        = "mipsel-none-linux-android"       -- removed in ndk r17
+        ,   ["mips64"]      = "mips64el-none-linux-android"     -- removed in ndk r17
         }
         assert(targets[arch], "unknown arch(%s) for android!", arch)
         platform:add("cxflags", "-target " .. targets[arch])
@@ -70,11 +76,17 @@ function main(platform)
             platform:add("shflags", "-gcc-toolchain " .. gcc_toolchain)
         end
     else
+        local march = arch
+        if arch == "arm64-v8a" then
+            march = "armv8-a"
+        else
+            march = "armv5te"
+        end
         -- old version ndk
-        platform:add("cxflags", "-march=" .. arch)
-        platform:add("asflags", "-march=" .. arch)
-        platform:add("ldflags", "-march=" .. arch)
-        platform:add("shflags", "-march=" .. arch)
+        platform:add("cxflags", "-march=" .. march)
+        platform:add("asflags", "-march=" .. march)
+        platform:add("ldflags", "-march=" .. march)
+        platform:add("shflags", "-march=" .. march)
     end
 
     -- init cxflags for the target kind: binary 
@@ -82,19 +94,23 @@ function main(platform)
 
     -- add flags for the sdk directory of ndk
     local ndk = config.get("ndk")
+    local ndkver = config.get("ndkver")
     local ndk_sdkver = config.get("ndk_sdkver")
     if ndk and ndk_sdkver then
 
         -- the sysroot archs
         local sysroot_archs = 
         {
-            ["armv5te"]     = "arch-arm"
-        ,   ["armv7-a"]     = "arch-arm"
+            ["armv5te"]     = "arch-arm"    -- deprecated
+        ,   ["armv7-a"]     = "arch-arm"    -- deprecated
+        ,   ["armeabi"]     = "arch-arm"    -- removed in ndk r17
+        ,   ["armeabi-v7a"] = "arch-arm"
         ,   ["arm64-v8a"]   = "arch-arm64"
-        ,   i386            = "arch-x86"
+        ,   i386            = "arch-x86"    -- deprecated
+        ,   x86             = "arch-x86"
         ,   x86_64          = "arch-x86_64"
-        ,   mips            = "arch-mips"
-        ,   mips64          = "arch-mips64"
+        ,   mips            = "arch-mips"   -- removed in ndk r17
+        ,   mips64          = "arch-mips64" -- removed in ndk r17
         }
         local sysroot_arch = sysroot_archs[arch]
 
@@ -121,13 +137,16 @@ function main(platform)
             -- the triples
             local triples = 
             {
-                ["armv5te"]     = "arm-linux-androideabi"
-            ,   ["armv7-a"]     = "arm-linux-androideabi"
+                ["armv5te"]     = "arm-linux-androideabi"   -- deprecated
+            ,   ["armv7-a"]     = "arm-linux-androideabi"   -- deprecated
+            ,   ["armeabi"]     = "arm-linux-androideabi"   -- removed in ndk r17
+            ,   ["armeabi-v7a"] = "arm-linux-androideabi"
             ,   ["arm64-v8a"]   = "aarch64-linux-android"
-            ,   i386            = "i686-linux-android"
+            ,   i386            = "i686-linux-android"      -- deprecated
+            ,   x86             = "i686-linux-android"
             ,   x86_64          = "x86_64-linux-android"
-            ,   mips            = "mips-linux-android"
-            ,   mips64          = "mips64-linux-android"
+            ,   mips            = "mips-linux-android"      -- removed in ndk r17
+            ,   mips64          = "mips64-linux-android"    -- removed in ndk r17
             }
             platform:add("cxflags", "-D__ANDROID_API__=" .. ndk_sdkver)
             platform:add("asflags", "-D__ANDROID_API__=" .. ndk_sdkver)
@@ -169,7 +188,8 @@ function main(platform)
         local cxxstl_sdkdir = nil
         local ndk_cxxstl = config.get("ndk_cxxstl")
         if ndk_cxxstl then
-            if ndk_cxxstl:startswith("llvmstl") then
+            -- we uses c++_static/c++_shared instead of llvmstl_static/llvmstl_shared
+            if ndk_cxxstl:startswith("c++") or ndk_cxxstl:startswith("llvmstl") then
                 cxxstl_sdkdir = cxxstl_sdkdir_llvmstl
             elseif ndk_cxxstl:startswith("gnustl") then
                 cxxstl_sdkdir = cxxstl_sdkdir_gnustl
@@ -178,7 +198,7 @@ function main(platform)
             end
         else
             if isllvm then
-                ndk_cxxstl = "llvmstl_static"
+                ndk_cxxstl = "c++_static"
                 cxxstl_sdkdir = cxxstl_sdkdir_llvmstl
             end
             if (cxxstl_sdkdir == nil or not os.isdir(cxxstl_sdkdir)) and cxxstl_sdkdir_gnustl then -- <= ndk r16
@@ -193,13 +213,16 @@ function main(platform)
             -- the toolchains archs
             local toolchains_archs = 
             {
-                ["armv5te"]     = "armeabi"
-            ,   ["armv7-a"]     = "armeabi-v7a"
+                ["armv5te"]     = "armeabi"         -- deprecated
+            ,   ["armv7-a"]     = "armeabi-v7a"     -- deprecated
+            ,   ["armeabi"]     = "armeabi"         -- removed in ndk r17
+            ,   ["armeabi-v7a"] = "armeabi-v7a"
             ,   ["arm64-v8a"]   = "arm64-v8a"
-            ,   i386            = "x86"
+            ,   i386            = "x86"             -- deprecated
+            ,   x86             = "x86"
             ,   x86_64          = "x86_64"
-            ,   mips            = "mips"
-            ,   mips64          = "mips64"
+            ,   mips            = "mips"            -- removed in ndk r17
+            ,   mips64          = "mips64"          -- removed in ndk r17
             }
             local toolchains_arch = toolchains_archs[arch]
 
@@ -208,7 +231,7 @@ function main(platform)
                 platform:add("ldflags", format("-L%s/libs/%s", cxxstl_sdkdir, toolchains_arch))
                 platform:add("shflags", format("-L%s/libs/%s", cxxstl_sdkdir, toolchains_arch))
             end
-            if ndk_cxxstl:startswith("llvmstl") then
+            if ndk_cxxstl:startswith("c++") or ndk_cxxstl:startswith("llvmstl") then
                 platform:add("cxxflags", format("-I%s/include", cxxstl_sdkdir))
                 if toolchains_arch then
                     platform:add("cxxflags", format("-I%s/libs/%s/include", cxxstl_sdkdir, toolchains_arch))
@@ -231,17 +254,17 @@ function main(platform)
             end
 
             -- add c++ stl links
-            if ndk_cxxstl == "llvmstl_static" then
+            if ndk_cxxstl == "c++_static" or ndk_cxxstl == "llvmstl_static" then
                 platform:add("ldflags", "-lc++_static", "-lc++abi")
                 platform:add("shflags", "-lc++_static", "-lc++abi")
-                if arch == "armv7-a" or arch == "armv5te" then
+                if arm32 then
                     platform:add("ldflags", "-lunwind", "-latomic")
                     platform:add("shflags", "-lunwind", "-latomic")
                 end
-            elseif ndk_cxxstl == "llvmstl_shared" then
+            elseif ndk_cxxstl == "c++_shared" or ndk_cxxstl == "llvmstl_shared" then
                 platform:add("ldflags", "-lc++_shared", "-lc++abi")
                 platform:add("shflags", "-lc++_shared", "-lc++abi")
-                if arch == "armv7-a" or arch == "armv5te" then
+                if arm32 then
                     platform:add("ldflags", "-lunwind", "-latomic")
                     platform:add("shflags", "-lunwind", "-latomic")
                 end
@@ -258,15 +281,23 @@ function main(platform)
                 platform:add("ldflags", "-lstlport_shared")
                 platform:add("shflags", "-lstlport_shared")
             end
-            
+
+            -- fix 'ld: error: cannot find -lc++' for clang++.exe on r20/windows
+            -- @see https://github.com/xmake-io/xmake/issues/684
+            if ndkver and ndkver >= 20 and (ndk_cxxstl:startswith("c++") or ndk_cxxstl:startswith("llvmstl")) then
+                platform:add("ldflags", "-nostdlib++")
+                platform:add("shflags", "-nostdlib++")
+            end
         end
     end
 
     -- init targets for rust
     local targets_rust = 
     {
-        ["armv5te"]     = "arm-linux-androideabi"
-    ,   ["armv7-a"]     = "arm-linux-androideabi"
+        ["armv5te"]     = "arm-linux-androideabi" -- deprecated
+    ,   ["armv7-a"]     = "arm-linux-androideabi" -- deprecated
+    ,   ["armeabi"]     = "arm-linux-androideabi" -- removed in ndk r17
+    ,   ["armeabi-v7a"] = "arm-linux-androideabi"
     ,   ["arm64-v8a"]   = "aarch64-linux-android"
     }
 

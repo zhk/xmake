@@ -82,16 +82,13 @@ function main()
             install(targetname or ifelse(option.get("all"), "__all", "__def"))
 
             -- trace
-            cprint("${bright}install ok!${clear}")
+            cprint("${color.success}install ok!")
         end,
 
         catch
         {
             -- failed or not permission? request administrator permission and install it again
             function (errors)
-
-                -- trace
-                vprint(errors)
 
                 -- try get privilege
                 if privilege.get() then
@@ -103,7 +100,7 @@ function main()
                             install(targetname or ifelse(option.get("all"), "__all", "__def"))
 
                             -- trace
-                            cprint("${bright}install ok!${clear}")
+                            cprint("${color.success}install ok!")
 
                             -- ok
                             return true
@@ -117,10 +114,8 @@ function main()
                     if ok then return end
                 end
 
-                -- show tips
-                cprint("${bright color.error}error: ${clear}installation failed, may permission denied!")
-
                 -- continue to install with administrator permission?
+                local ok = false
                 if sudo.has() then
 
                     -- confirm to install?
@@ -131,9 +126,11 @@ function main()
                         sudo.runl(path.join(os.scriptdir(), "install_admin.lua"), {targetname or ifelse(option.get("all"), "__all", "__def"), option.get("installdir"), option.get("prefix")})
 
                         -- trace
-                        cprint("${bright}install ok!${clear}")
+                        cprint("${color.success}install ok!")
+                        ok = true
                     end
                 end
+                assert(ok, "install failed, %s", errors or "unknown reason")
             end
         }
     }

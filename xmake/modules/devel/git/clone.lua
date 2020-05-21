@@ -31,8 +31,8 @@ import("lib.detect.find_tool")
 --
 -- import("devel.git")
 -- 
--- git.clone("git@github.com:tboox/xmake.git")
--- git.clone("git@github.com:tboox/xmake.git", {depth = 1, branch = "master", outputdir = "/tmp/xmake"})
+-- git.clone("git@github.com:xmake-io/xmake.git")
+-- git.clone("git@github.com:xmake-io/xmake.git", {depth = 1, branch = "master", outputdir = "/tmp/xmake"})
 --
 -- @endcode
 --
@@ -54,12 +54,20 @@ function main(url, opt)
     -- set depth
     if opt.depth then
         table.insert(argv, "--depth")
-        table.insert(argv, ifelse(type(opt.depth) == "number", tostring(opt.depth), opt.depth))
+        table.insert(argv, type(opt.depth) == "number" and tostring(opt.depth) or opt.depth)
     end
 
     -- recursive?
     if opt.recursive then
         table.insert(argv, "--recursive")
+    end
+
+    -- clone for submodules
+    if opt.recurse_submodules then
+        table.insert(argv, "--recurse-submodules")
+    end
+    if opt.shallow_submodules then
+        table.insert(argv, "--shallow-submodules")
     end
 
     -- set outputdir

@@ -24,27 +24,30 @@ local _file     = _file or {}
 local _filelock = _filelock or {}
 
 -- load modules
-local path   = require("base/path")
-local table  = require("base/table")
-local string = require("base/string")
+local path      = require("base/path")
+local table     = require("base/table")
+local string    = require("base/string")
+local todisplay = require("base/todisplay")
 
 -- save metatable and builtin functions
 io._file        = _file
 io._filelock    = _filelock
 io._stdfile     = io._stdfile or io.stdfile
 
--- new an file
-function _file.new(filepath, fileref)
+-- new a file
+function _file.new(filepath, cdata, isstdfile)
     local file = table.inherit(_file)
-    file._NAME = path.filename(filepath)
-    file._PATH = path.absolute(filepath)
-    file._FILE = fileref
+    file._PATH = isstdfile and filepath or path.absolute(filepath)
+    file._FILE = cdata
     setmetatable(file, _file)
     return file
 end
 
 -- get the file name 
 function _file:name()
+    if not self._NAME then
+        self._NAME = path.filename(self:path())
+    end
     return self._NAME
 end
 
@@ -63,7 +66,7 @@ function _file:close()
     end
 
     -- close file
-    ok, errors = io.file_close(self._FILE)
+    ok, errors = io.file_close(self:cdata())
     if ok then
         self._FILE = nil
     end
@@ -79,16 +82,45 @@ function _file:__tostring()
     return "<file: " .. str .. ">"
 end
 
+-- todisplay(file)
+function _file:__todisplay()
+    local size = _file.size(self)
+    local filepath = _file.path(self)
+    if not size then
+        return string.format("file${reset} %s", todisplay(filepath))
+    end
+
+    local unit = "B"
+    if size >= 1000 then
+        size = size / 1024
+        unit = "KiB"
+    end
+    if size >= 1000 then
+        size = size / 1024
+        unit = "MiB"
+    end
+    if size >= 1000 then
+        size = size / 1024
+        unit = "GiB"
+    end
+    return string.format("file${reset}(${color.dump.number}%.3f%s${reset}) %s", size, unit, todisplay(filepath))
+end
+
 -- gc(file)
 function _file:__gc()
-    if self._FILE and io.file_close(self._FILE) then
+    if self:cdata() and io.file_close(self:cdata()) then
         self._FILE = nil
     end
 end
 
 -- get file length
 function _file:__len()
-    return self:size()
+    return _file.size(self)
+end
+
+-- get cdata
+function _file:cdata()
+    return self._FILE
 end
 
 -- get file rawfd
@@ -101,7 +133,7 @@ function _file:rawfd()
     end
 
     -- get file rawfd
-    local result, errors = io.file_rawfd(self._FILE)
+    local result, errors = io.file_rawfd(self:cdata())
     if not result and errors then
         errors = string.format("%s: %s", self, errors)
     end
@@ -118,7 +150,7 @@ function _file:size()
     end
 
     -- get file size
-    local result, errors = io.file_size(self._FILE)
+    local result, errors = io.file_size(self:cdata())
     if not result and errors then
         errors = string.format("%s: %s", self, errors)
     end
@@ -136,7 +168,7 @@ function _file:read(fmt, opt)
 
     -- read file
     opt = opt or {}
-    local result, errors = io.file_read(self._FILE, fmt, opt.continuation)
+    local result, errors = io.file_read(self:cdata(), fmt, opt.continuation)
     if errors then
         errors = string.format("%s: %s", self, errors)
     end
@@ -153,7 +185,7 @@ function _file:write(...)
     end
 
     -- write file
-    ok, errors = io.file_write(self._FILE, ...)
+    ok, errors = io.file_write(self:cdata(), ...)
     if not ok and errors then
         errors = string.format("%s: %s", self, errors)
     end
@@ -170,7 +202,7 @@ function _file:seek(whence, offset)
     end
 
     -- seek file
-    local result, errors = io.file_seek(self._FILE, whence, offset)
+    local result, errors = io.file_seek(self:cdata(), whence, offset)
     if not result and errors then
         errors = string.format("%s: %s", self, errors)
     end
@@ -187,7 +219,7 @@ function _file:flush()
     end
 
     -- flush file
-    ok, errors = io.file_flush(self._FILE)
+    ok, errors = io.file_flush(self:cdata())
     if not ok and errors then
         errors = string.format("%s: %s", self, errors)
     end
@@ -204,7 +236,7 @@ function _file:isatty()
     end
 
     -- is a tty?
-    ok, errors = io.file_isatty(self._FILE)
+    ok, errors = io.file_isatty(self:cdata())
     if ok == nil and errors then
         errors = string.format("%s: %s", self, errors)
     end
@@ -213,7 +245,7 @@ end
 
 -- ensure the file is opened
 function _file:_ensure_opened()
-    if not self._FILE then
+    if not self:cdata() then
         return false, string.format("%s: has been closed!", self)
     end
     return true
@@ -223,9 +255,9 @@ end
 function _file:lines(opt)
     opt = opt or {}
     return function()
-        local l = self:read("l", opt)
+        local l = _file.read(self, "l", opt)
         if not l and opt.close_on_finished then
-            self:close()
+            _file.close(self)
         end
         return l
     end
@@ -233,12 +265,12 @@ end
 
 -- print file
 function _file:print(...)
-    return self:write(string.format(...), "\n")
+    return _file.write(self, string.format(...), "\n")
 end
 
 -- printf file
 function _file:printf(...)
-    return self:write(string.format(...))
+    return _file.write(self, string.format(...))
 end
 
 -- save object
@@ -247,13 +279,13 @@ function _file:save(object, opt)
     if errors then
         return false, errors
     else
-        return self:write(str)
+        return _file.write(self, str)
     end
 end
 
 -- load object
 function _file:load()
-    local data, err = self:read("*all")
+    local data, err = _file.read(self, "*all")
     if err then
         return nil, err
     end
@@ -265,7 +297,6 @@ end
 -- new an filelock
 function _filelock.new(lockpath, lock)
     local filelock = table.inherit(_filelock)
-    filelock._NAME = path.filename(lockpath)
     filelock._PATH = path.absolute(lockpath)
     filelock._LOCK = lock
     filelock._LOCKED_NUM = 0
@@ -273,14 +304,22 @@ function _filelock.new(lockpath, lock)
     return filelock
 end
 
--- get the filelock name 
+-- get the filelock name
 function _filelock:name()
+    if not self._NAME then
+        self._NAME = path.filename(self:path())
+    end
     return self._NAME
 end
 
--- get the filelock path 
+-- get the filelock path
 function _filelock:path()
     return self._PATH
+end
+
+-- get the cdata
+function _filelock:cdata()
+    return self._LOCK
 end
 
 -- is locked?
@@ -303,7 +342,7 @@ function _filelock:lock(opt)
     end
 
     -- lock it
-    if self._LOCKED_NUM > 0 or io.filelock_lock(self._LOCK, opt) then
+    if self._LOCKED_NUM > 0 or io.filelock_lock(self:cdata(), opt) then
         self._LOCKED_NUM = self._LOCKED_NUM + 1
         return true
     else
@@ -326,7 +365,7 @@ function _filelock:trylock(opt)
     end
 
     -- try lock it
-    if self._LOCKED_NUM > 0 or io.filelock_trylock(self._LOCK, opt) then
+    if self._LOCKED_NUM > 0 or io.filelock_trylock(self:cdata(), opt) then
         self._LOCKED_NUM = self._LOCKED_NUM + 1
         return true
     else
@@ -344,7 +383,7 @@ function _filelock:unlock(opt)
     end
 
     -- unlock it
-    if self._LOCKED_NUM > 1 or (self._LOCKED_NUM > 0 and io.filelock_unlock(self._LOCK)) then
+    if self._LOCKED_NUM > 1 or (self._LOCKED_NUM > 0 and io.filelock_unlock(self:cdata())) then
         if self._LOCKED_NUM > 0 then
             self._LOCKED_NUM = self._LOCKED_NUM - 1
         else 
@@ -366,7 +405,7 @@ function _filelock:close()
     end
 
     -- close it
-    ok = io.filelock_close(self._LOCK)
+    ok = io.filelock_close(self:cdata())
     if ok then
         self._LOCK = nil
         self._LOCKED_NUM = 0
@@ -376,7 +415,7 @@ end
 
 -- ensure the file is opened
 function _filelock:_ensure_opened()
-    if not self._LOCK then
+    if not self:cdata() then
         return false, string.format("%s: has been closed!", self)
     end
     return true
@@ -384,16 +423,22 @@ end
 
 -- tostring(filelock)
 function _filelock:__tostring()
-    local str = self:path()
+    local str = _filelock.path(self)
     if #str > 16 then
         str = ".." .. str:sub(#str - 16, #str)
     end
     return "<filelock: " .. str .. ">"
 end
 
+-- todisplay(filelock)
+function _filelock:__todisplay()
+    local str = _filelock.path(self)
+    return "filelock${reset} " .. todisplay(str)
+end
+
 -- gc(filelock)
 function _filelock:__gc()
-    if self._LOCK and io.filelock_close(self._LOCK) then
+    if self:cdata() and io.filelock_close(self:cdata()) then
         self._LOCK = nil
         self._LOCKED_NUM = 0
     end
@@ -423,10 +468,9 @@ function io.readfile(filepath, opt)
     opt = opt or {}
 
     -- open file
-    local file = io.open(filepath, "r", opt)
+    local file, errors = io.open(filepath, "r", opt)
     if not file then
-        -- error
-        return nil, string.format("open %s failed!", filepath)
+        return nil, errors
     end
 
     -- read all
@@ -466,9 +510,9 @@ function io.writefile(filepath, data, opt)
     opt = opt or {}
 
     -- open file
-    local file = io.open(filepath, "w", opt)
+    local file, errors = io.open(filepath, "w", opt)
     if not file then
-        return false, string.format("open %s failed!", filepath)
+        return false, errors
     end
 
     -- write all
@@ -498,7 +542,7 @@ function io.stdfile(filepath)
         file = io._stdfile(3)
     end
     if file then
-        return _file.new(filepath, file)
+        return _file.new(filepath, file, true)
     else
         return nil, string.format("failed to get std file: %s", filepath)
     end
@@ -519,7 +563,7 @@ function io.open(filepath, mode, opt)
     if file then
         return _file.new(filepath, file)
     else
-        return nil, string.format("failed to open file: %s", filepath)
+        return nil, string.format("cannot open file: %s, %s", filepath, os.strerror())
     end
 end
 
@@ -534,7 +578,7 @@ function io.openlock(filepath)
     if lock then
         return _filelock.new(filepath, lock)
     else
-        return nil, string.format("failed to open lock: %s", filepath)
+        return nil, string.format("cannot open lock: %s, %s", filepath, os.strerror())
     end
 end
 
@@ -642,7 +686,7 @@ function io.cat(filepath, linecount, opt)
         for line in file:lines(opt) do
 
             -- show line
-            io.print(line)
+            io.write(line, "\n")
 
             -- end?
             if linecount and count >= linecount then

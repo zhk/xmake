@@ -26,9 +26,9 @@ rule("c.build.pcheader")
 
 -- define rule: c.build
 rule("c.build")
-    set_extensions(".c")    
+    set_sourcekinds("cc")
     add_deps("c.build.pcheader")
-    on_build_files("private.action.build.object")
+    on_build_files("private.action.build.object", {batch = true})
 
 -- define rule: c++.build.pcheader
 rule("c++.build.pcheader")
@@ -38,10 +38,25 @@ rule("c++.build.pcheader")
 
 -- define rule: c++.build
 rule("c++.build")
-    set_extensions(".cpp", ".cc", ".cxx")    
+    set_sourcekinds("cxx")
     add_deps("c++.build.pcheader", "c++.build.modules")
-    on_build_files("private.action.build.object")
+    on_build_files("private.action.build.object", {batch = true})
 
 -- define rule: cpp
 rule("c++")
-    add_deps("c++.build", "c.build", "utils.merge.object", "utils.merge.archive")
+
+    -- add build rules
+    add_deps("c++.build", "c.build")
+
+    -- inherit links and linkdirs of all dependent targets by default
+    add_deps("utils.inherit.links")
+
+    -- support `add_files("src/*.o")` and `add_files("src/*.a")` to merge object and archive files to target
+    add_deps("utils.merge.object", "utils.merge.archive")
+
+    -- we attempt to extract symbols to the independent file and 
+    -- strip self-target binary if `set_symbols("debug")` and `set_strip("all")` are enabled
+    add_deps("utils.symbols.extract")
+
+    -- check targets
+    add_deps("utils.check.targets")

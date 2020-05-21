@@ -26,9 +26,11 @@ local hashset = require("base/hashset")
 local sandbox_hashset = sandbox_hashset or {}
 
 -- inherit some builtin interfaces
-sandbox_hashset.new  = hashset.new
-sandbox_hashset.of   = hashset.of
-sandbox_hashset.from = hashset.from
+for key, value in pairs(hashset) do
+    if not key:startswith("_") then
+        sandbox_hashset[key] = value
+    end
+end
 
 -- return module
 return sandbox_hashset

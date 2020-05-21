@@ -20,6 +20,7 @@
 
 -- imports
 import("core.base.option")
+import("core.base.process")
 import("core.project.config")
 import("core.platform.platform")
 import("core.platform.environment")
@@ -88,10 +89,7 @@ function post()
     try
     {
         function ()
-            local proc = process.openv("xmake", argv, {outpath = path.join(os.tmpdir(), projectname .. ".stats.log")})
-            if proc ~= nil then
-                proc:close()
-            end
+            process.openv("xmake", argv, {stdout = path.join(os.tmpdir(), projectname .. ".stats.log")}, {detach = true}):close()
         end
     }
 

@@ -44,7 +44,7 @@ function main()
             uninstall(targetname)
 
             -- trace
-            cprint("${bright}uninstall ok!${clear}")
+            cprint("${color.success}uninstall ok!")
         end,
 
         catch
@@ -62,7 +62,7 @@ function main()
                             uninstall(targetname)
 
                             -- trace
-                            cprint("${bright}uninstall ok!${clear}")
+                            cprint("${color.success}uninstall ok!")
 
                             -- ok
                             return true
@@ -76,10 +76,8 @@ function main()
                     if ok then return end
                 end
 
-                -- show tips
-                cprint("${bright color.error}error: ${clear}failed to uninstall, may permission denied!")
-
                 -- continue to uninstall with administrator permission?
+                local ok = false
                 if sudo.has() then
 
                     -- confirm to uninstall?
@@ -90,9 +88,11 @@ function main()
                         sudo.runl(path.join(os.scriptdir(), "uninstall_admin.lua"), {targetname or "__all", option.get("installdir"), option.get("prefix")})
 
                         -- trace
-                        cprint("${bright}uninstall ok!${clear}")
+                        cprint("${color.success}uninstall ok!")
+                        ok = true
                     end
                 end
+                assert(ok, "uninstall failed, %s", errors or "unknown reason")
             end
         }
     }

@@ -42,17 +42,19 @@ static tb_int_t   g_events_count = 0;
 /* //////////////////////////////////////////////////////////////////////////////////////
  * private implementation
  */
-static tb_void_t xm_io_poller_event(tb_poller_ref_t poller, tb_socket_ref_t sock, tb_size_t events, tb_cpointer_t priv)
+static tb_void_t xm_io_poller_event(tb_poller_ref_t poller, tb_poller_object_ref_t object, tb_long_t events, tb_cpointer_t priv)
 {
     // check
     tb_assert_and_check_return(g_lua);
 
-    // save socket and events
+    // save object and events
     lua_newtable(g_lua);
-    lua_pushlightuserdata(g_lua, (tb_pointer_t)sock);
+    lua_pushinteger(g_lua, (tb_int_t)object->type);
     lua_rawseti(g_lua, -2, 1);
-    lua_pushinteger(g_lua, (tb_int_t)events);
+    lua_pushlightuserdata(g_lua, object->ref.ptr);
     lua_rawseti(g_lua, -2, 2);
+    lua_pushinteger(g_lua, (tb_int_t)events);
+    lua_rawseti(g_lua, -2, 3);
     lua_rawseti(g_lua, -2, ++g_events_count);
 }
 

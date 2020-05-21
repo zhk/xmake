@@ -139,7 +139,7 @@ colors._keys24 =
 }
 
 -- the escape string
-colors._escape = string.char(27) .. '[%sm'
+colors._escape = '\x1b[%sm'
 
 -- get colorterm setting
 --
@@ -164,7 +164,7 @@ function colors.color8()
     end
 
     -- has 8 colors?
-    if colorterm == "color8" or os.host() ~= "windows" then
+    if colorterm == "color8" or os.subhost() ~= "windows" then
         return true
     end
 
@@ -183,7 +183,7 @@ function colors.color256()
     end
 
     -- has 256 colors?
-    return colorterm == "color256" or os.host() ~= "windows"
+    return colorterm == "color256" or os.subhost() ~= "windows"
 end
 
 -- support 24bits true color
@@ -272,6 +272,7 @@ end
 -- @param opt          options
 --                       patch_reset: wrap str with `"${reset}"`?
 --                       ignore_unknown: ignore unknown codes like `"${unknown_code}"`?
+--                       plain: false
 --
 -- 8 colors:
 --
@@ -336,7 +337,7 @@ function colors.translate(str, opt)
 
         -- is plain theme? no colors and no emoji
         local noemoji = not colors.emoji()
-        if theme and theme:name() == "plain" then
+        if opt.plain or (theme and theme:name() == "plain") then
             nocolors = true
             noemoji = true
         end
@@ -348,7 +349,7 @@ function colors.translate(str, opt)
         end
 
         -- split words
-        local blocks_raw = word:split("%s")
+        local blocks_raw = word:split(' ', {plain = true})
 
         -- translate theme color first, e.g ${color.error}
         local blocks = {}
@@ -356,7 +357,7 @@ function colors.translate(str, opt)
             if theme then
                 local theme_block = theme:get(block)
                 if theme_block then
-                    for _, theme_block_sub in ipairs(theme_block:split("%s")) do
+                    for _, theme_block_sub in ipairs(theme_block:split(' ', {plain = true})) do
                         table.insert(blocks, theme_block_sub)
                     end
                 else
@@ -431,14 +432,12 @@ end
 
 -- ignore all colors
 function colors.ignore(str)
-
-    -- check string
-    if not str then
-        return nil
+    if str then
+        -- strip "${red}" and "${theme color}"
+        str = colors.translate(str, {plain = true})
+        -- strip color code, e.g. for clang/gcc color diagnostics output
+        return (str:gsub("\x1b%[.-m", ""))
     end
-
-    -- ignore it
-    return (string.gsub(str, "(%${(.-)})", ""))
 end
 
 -- get theme

@@ -26,20 +26,23 @@ import("core.platform.environment")
 import("make.makefile")
 import("make.xmakefile")
 import("cmake.cmakelists")
+import("ninja.build_ninja")
 import("vstudio.vs")
 import("vsxmake.vsxmake")
 import("clang.compile_flags")
 import("clang.compile_commands")
 
--- make project
-function _make(kind)
+function makers()
 
     -- the maps
-    local maps = 
-    {
-        makefile         = makefile.make
+    return
+    {   
+        make             = makefile.make
+    ,   makefile         = makefile.make
     ,   xmakefile        = xmakefile.make
+    ,   cmake            = cmakelists.make
     ,   cmakelists       = cmakelists.make
+    ,   ninja            = build_ninja.make
     ,   vs2002           = vs.make(2002)
     ,   vs2003           = vs.make(2003)
     ,   vs2005           = vs.make(2005)
@@ -61,6 +64,12 @@ function _make(kind)
     ,   compile_flags    = compile_flags.make
     ,   compile_commands = compile_commands.make
     }
+end
+
+-- make project
+function _make(kind)
+
+    local maps = makers()
     assert(maps[kind], "the project kind(%s) is not supported!", kind)
 
     -- make it
@@ -83,5 +92,5 @@ function main()
     environment.leave("toolchains")
 
     -- trace
-    cprint("${bright}create ok!")
+    cprint("${color.success}create ok!")
 end

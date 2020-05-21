@@ -25,99 +25,39 @@ local poller = poller or {}
 local io     = require("base/io")
 local string = require("base/string")
 
--- the poller object type
+-- the poller object type, @see tbox/platform/poller.h
 poller.OT_SOCK = 1
-poller.OT_PROC = 2
-poller.OT_PIPE = 3
+poller.OT_PIPE = 2
+poller.OT_PROC = 3
 
 -- the poller events, @see tbox/platform/poller.h
-poller.EV_SOCK_RECV    = 1
-poller.EV_SOCK_SEND    = 2
-poller.EV_SOCK_CONN    = poller.EV_SOCK_SEND
-poller.EV_SOCK_ACPT    = poller.EV_SOCK_RECV
-poller.EV_SOCK_CLEAR   = 0x0010 -- edge trigger. after the event is retrieved by the user, its state is reset
-poller.EV_SOCK_ONESHOT = 0x0010 -- causes the event to return only the first occurrence of the filter being triggered
-poller.EV_SOCK_EOF     = 0x0100 -- the event flag will be marked if the connection be closed in the edge trigger
-poller.EV_SOCK_ERROR   = 0x0200 -- socket error after waiting
+poller.EV_POLLER_RECV    = 1
+poller.EV_POLLER_SEND    = 2
+poller.EV_POLLER_CONN    = poller.EV_POLLER_SEND
+poller.EV_POLLER_ACPT    = poller.EV_POLLER_RECV
+poller.EV_POLLER_CLEAR   = 0x0010 -- edge trigger. after the event is retrieved by the user, its state is reset
+poller.EV_POLLER_ONESHOT = 0x0010 -- causes the event to return only the first occurrence of the filter being triggered
+poller.EV_POLLER_EOF     = 0x0100 -- the event flag will be marked if the connection be closed in the edge trigger
+poller.EV_POLLER_ERROR   = 0x0200 -- socket error after waiting
 
--- get socket data 
-function poller:_sockdata(csock)
-    return self._SOCKDATA and self._SOCKDATA[csock] or nil
+-- get poller object data 
+function poller:_pollerdata(cdata)
+    return self._POLLERDATA and self._POLLERDATA[cdata] or nil
 end
 
--- set socket data
-function poller:_sockdata_set(csock, data)
-    local sockdata = self._SOCKDATA 
-    if not sockdata then
-        sockdata = {}
-        self._SOCKDATA = sockdata
+-- set poller object data
+function poller:_pollerdata_set(cdata, data)
+    local pollerdata = self._POLLERDATA 
+    if not pollerdata then
+        pollerdata = {}
+        self._POLLERDATA = pollerdata
     end
-    sockdata[csock] = data
-end
-
--- insert socket events to poller
-function poller:_insert_sock(sock, events, udata)
-
-    -- ensure opened
-    local ok, errors = sock:_ensure_opened()
-    if not ok then
-        return false, errors
-    end
-
-    -- insert it
-    if not io.poller_insert(sock:csock(), events) then
-        return false, string.format("%s: insert events(%d) to poller failed!", sock, events)
-    end
-
-    -- save socket data and save sock/ref for gc
-    self:_sockdata_set(sock:csock(), {sock, udata})
-    return true
-end
-
--- modify socket events in poller
-function poller:_modify_sock(sock, events, udata)
-
-    -- ensure opened
-    local ok, errors = sock:_ensure_opened()
-    if not ok then
-        return false, errors
-    end
-
-    -- modify it
-    if not io.poller_modify(sock:csock(), events) then
-        return false, string.format("%s: modify events(%d) to poller failed!", sock, events)
-    end
-
-    -- update socket data for this socket
-    self:_sockdata_set(sock:csock(), {sock, udata})
-    return true
-end
-
--- remove socket from poller
-function poller:_remove_sock(sock)
-
-    -- ensure opened
-    local ok, errors = sock:_ensure_opened()
-    if not ok then
-        return false, errors
-    end
-
-    -- remove it
-    if not io.poller_remove(sock:csock()) then
-        return false, string.format("%s: remove events from poller failed!", sock)
-    end
-
-    -- remove socket data for this socket
-    self:_sockdata_set(sock, nil)
-    return true
+    pollerdata[cdata] = data
 end
 
 -- support events?
-function poller:support(otype, events)
-    if otype == poller.OT_SOCK then
-        return io.poller_support(events)
-    end
-    return false, string.format("invalid poller object type(%d)!", otype)
+function poller:support(events)
+    return io.poller_support(events)
 end
 
 -- spank poller to break the wait() and return all triggered events
@@ -126,30 +66,48 @@ function poller:spank()
 end
 
 -- insert object events to poller
-function poller:insert(otype, obj, events, udata)
-    if otype == poller.OT_SOCK then
-        return self:_insert_sock(obj, events, udata)
+function poller:insert(obj, events, udata)
+
+    -- insert it
+    local ok, errors = io.poller_insert(obj:otype(), obj:cdata(), events) 
+    if not ok then
+        return false, string.format("%s: insert events(%d) to poller failed, %s", obj, events, errors or "unknown reason")
     end
-    return false, string.format("invalid poller object type(%d)!", otype)
+
+    -- save poller object data and save obj/ref for gc
+    self:_pollerdata_set(obj:cdata(), {obj, udata})
+    return true
 end
 
 -- modify object events in poller
-function poller:modify(otype, obj, events, udata)
-    if otype == poller.OT_SOCK then
-        return self:_modify_sock(obj, events, udata)
+function poller:modify(obj, events, udata)
+
+    -- modify it
+    local ok, errors = io.poller_modify(obj:otype(), obj:cdata(), events) 
+    if not ok then
+        return false, string.format("%s: modify events(%d) to poller failed, %s", obj, events, errors or "unknown reason")
     end
-    return false, string.format("invalid poller object type(%d)!", otype)
+
+    -- update poller object data 
+    self:_pollerdata_set(obj:cdata(), {obj, udata})
+    return true
 end
 
--- remove socket from poller
-function poller:remove(otype, obj)
-    if otype == poller.OT_SOCK then
-        return self:_remove_sock(obj)
+-- remove object from poller
+function poller:remove(obj)
+
+    -- remove it
+    local ok, errors = io.poller_remove(obj:otype(), obj:cdata()) 
+    if not ok then
+        return false, string.format("%s: remove events from poller failed, %s", obj, errors or "unknown reason")
     end
-    return false, string.format("invalid poller object type(%d)!", otype)
+
+    -- remove poller object data 
+    self:_pollerdata_set(obj, nil)
+    return true
 end
 
--- wait socket events in poller
+-- wait object events in poller
 function poller:wait(timeout)
 
     -- wait it
@@ -163,18 +121,20 @@ function poller:wait(timeout)
         return -1, string.format("events(%d) != %d in poller!", #events, count)
     end
 
-    -- wrap socket 
+    -- wrap objects with cdata 
     local results = {}
     if events then
         for _, v in ipairs(events) do
-            -- TODO only socket events now. It will be proc/pipe events in the future
-            local csock      = v[1]
-            local sockevents = v[2]
-            local sockdata   = self:_sockdata(csock)
-            if not sockdata then
-                return -1, string.format("no socket data for csock(%d)!", csock)
+            local otype  = v[1]
+            local cdata  = v[2]
+            local events = v[3]
+            local pollerdata   = self:_pollerdata(cdata)
+            if not pollerdata then
+                return -1, string.format("no object data for cdata(%d)!", cdata)
             end
-            table.insert(results, {poller.OT_SOCK,  sockdata[1], sockevents, sockdata[2]})
+            local obj = pollerdata[1]
+            assert(obj and obj:otype() == otype and obj:cdata() == cdata)
+            table.insert(results, {obj, events, pollerdata[2]})
         end
     end
     return count, results

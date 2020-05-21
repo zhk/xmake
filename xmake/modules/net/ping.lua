@@ -22,6 +22,7 @@
 import("lib.detect.cache")
 import("detect.tools.find_ping")
 import("detect.tools.find_nmap")
+import("private.async.runjobs")
 
 -- send ping to hosts
 --
@@ -50,7 +51,7 @@ function main(hosts, opt)
     -- run tasks
     local results = {}
     hosts = table.wrap(hosts)
-    process.runjobs(function (index)
+    runjobs("ping", function (index)
         local host = hosts[index]
         if host then
 
@@ -106,7 +107,7 @@ function main(hosts, opt)
                 vprint("pinging for the host(%s) ... %d ms", host, timeval)
             end
         end
-    end, #hosts)
+    end, {total = #hosts})
 
     -- save cache
     if cacheinfo then

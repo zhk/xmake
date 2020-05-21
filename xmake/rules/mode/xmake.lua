@@ -49,7 +49,7 @@ rule("mode.release")
                 target:set("symbols", "hidden")
             end
 
-            -- enable fastest optimization
+            -- enable optimization
             if not target:get("optimize") then
                 if is_plat("android", "iphoneos") then
                     target:set("optimize", "smallest")
@@ -77,41 +77,19 @@ rule("mode.profile")
                 target:set("symbols", "debug")
             end
 
-            -- enable fastest optimization
+            -- enable optimization
             if not target:get("optimize") then
-                target:set("optimize", "fastest")
+                if is_plat("android", "iphoneos") then
+                    target:set("optimize", "smallest")
+                else
+                    target:set("optimize", "fastest")
+                end
             end
 
             -- enable gprof 
             target:add("cxflags", "-pg")
             target:add("mxflags", "-pg")
             target:add("ldflags", "-pg")
-        end
-    end)
-
--- define rule: check mode
-rule("mode.check")
-    after_load(function (target)
-
-        -- is check mode now? xmake f -m check
-        if is_mode("check") then
- 
-            -- enable the debug symbols
-            if not target:get("symbols") then
-                target:set("symbols", "debug")
-            end
-
-            -- disable optimization
-            if not target:get("optimize") then
-                target:set("optimize", "none")
-            end
-
-            -- attempt to enable some checkers for pc
-            if is_mode("check") and is_arch("i386", "x86_64") then
-                target:add("cxflags", "-fsanitize=address", "-ftrapv")
-                target:add("mxflags", "-fsanitize=address", "-ftrapv")
-                target:add("ldflags", "-fsanitize=address")
-            end
         end
     end)
 
@@ -136,5 +114,200 @@ rule("mode.coverage")
             target:add("cxflags", "--coverage")
             target:add("mxflags", "--coverage")
             target:add("ldflags", "--coverage")
+        end
+    end)
+
+-- define rule: asan mode
+rule("mode.asan")
+    after_load(function (target)
+
+        -- is asan mode now? xmake f -m asan
+        if is_mode("asan") then
+
+            -- enable the debug symbols
+            if not target:get("symbols") then
+                target:set("symbols", "debug")
+            end
+
+            -- enable optimization
+            if not target:get("optimize") then
+                if is_plat("android", "iphoneos") then
+                    target:set("optimize", "smallest")
+                else
+                    target:set("optimize", "fastest")
+                end
+            end
+
+            -- enable asan checker
+            target:add("cxflags", "-fsanitize=address")
+            target:add("mxflags", "-fsanitize=address")
+            target:add("ldflags", "-fsanitize=address")
+            target:add("shflags", "-fsanitize=address")
+        end
+    end)
+
+-- define rule: tsan mode
+rule("mode.tsan")
+    after_load(function (target)
+
+        -- is tsan mode now? xmake f -m tsan
+        if is_mode("tsan") then
+
+            -- enable the debug symbols
+            if not target:get("symbols") then
+                target:set("symbols", "debug")
+            end
+
+            -- enable optimization
+            if not target:get("optimize") then
+                if is_plat("android", "iphoneos") then
+                    target:set("optimize", "smallest")
+                else
+                    target:set("optimize", "fastest")
+                end
+            end
+
+            -- enable tsan checker
+            target:add("cxflags", "-fsanitize=thread")
+            target:add("mxflags", "-fsanitize=thread")
+            target:add("ldflags", "-fsanitize=thread")
+            target:add("shflags", "-fsanitize=thread")
+        end
+    end)
+
+-- define rule: msan mode
+rule("mode.msan")
+    after_load(function (target)
+
+        -- is msan mode now? xmake f -m msan
+        if is_mode("msan") then
+
+            -- enable the debug symbols
+            if not target:get("symbols") then
+                target:set("symbols", "debug")
+            end
+
+            -- enable optimization
+            if not target:get("optimize") then
+                if is_plat("android", "iphoneos") then
+                    target:set("optimize", "smallest")
+                else
+                    target:set("optimize", "fastest")
+                end
+            end
+
+            -- enable msan checker
+            target:add("cxflags", "-fsanitize=memory")
+            target:add("mxflags", "-fsanitize=memory")
+            target:add("ldflags", "-fsanitize=memory")
+            target:add("shflags", "-fsanitize=memory")
+        end
+    end)
+
+-- define rule: lsan mode
+rule("mode.lsan")
+    after_load(function (target)
+
+        -- is lsan mode now? xmake f -m lsan
+        if is_mode("lsan") then
+
+            -- enable the debug symbols
+            if not target:get("symbols") then
+                target:set("symbols", "debug")
+            end
+
+            -- enable optimization
+            if not target:get("optimize") then
+                if is_plat("android", "iphoneos") then
+                    target:set("optimize", "smallest")
+                else
+                    target:set("optimize", "fastest")
+                end
+            end
+
+            -- enable lsan checker
+            target:add("cxflags", "-fsanitize=leak")
+            target:add("mxflags", "-fsanitize=leak")
+            target:add("ldflags", "-fsanitize=leak")
+            target:add("shflags", "-fsanitize=leak")
+        end
+    end)
+
+-- define rule: ubsan mode
+rule("mode.ubsan")
+    after_load(function (target)
+
+        -- is ubsan mode now? xmake f -m ubsan
+        if is_mode("ubsan") then
+
+            -- enable the debug symbols
+            if not target:get("symbols") then
+                target:set("symbols", "debug")
+            end
+
+            -- enable optimization
+            if not target:get("optimize") then
+                if is_plat("android", "iphoneos") then
+                    target:set("optimize", "smallest")
+                else
+                    target:set("optimize", "fastest")
+                end
+            end
+
+            -- enable tsan checker
+            target:add("cxflags", "-fsanitize=undefined")
+            target:add("mxflags", "-fsanitize=undefined")
+            target:add("ldflags", "-fsanitize=undefined")
+            target:add("shflags", "-fsanitize=undefined")
+        end
+    end)
+
+-- define rule: valgrind mode
+rule("mode.valgrind")
+    after_load(function (target)
+
+        -- is valgrind mode now? xmake f -m valgrind
+        if is_mode("valgrind") then
+
+            -- enable the debug symbols
+            if not target:get("symbols") then
+                target:set("symbols", "debug")
+            end
+
+            -- enable optimization
+            if not target:get("optimize") then
+                if is_plat("android", "iphoneos") then
+                    target:set("optimize", "smallest")
+                else
+                    target:set("optimize", "fastest")
+                end
+            end
+        end
+    end)
+
+-- define rule: check mode (deprecated)
+rule("mode.check")
+    after_load(function (target)
+
+        -- is check mode now? xmake f -m check
+        if is_mode("check") then
+ 
+            -- enable the debug symbols
+            if not target:get("symbols") then
+                target:set("symbols", "debug")
+            end
+
+            -- disable optimization
+            if not target:get("optimize") then
+                target:set("optimize", "none")
+            end
+
+            -- attempt to enable some checkers for pc
+            if is_mode("check") and is_arch("i386", "x86_64") then
+                target:add("cxflags", "-fsanitize=address", "-ftrapv")
+                target:add("mxflags", "-fsanitize=address", "-ftrapv")
+                target:add("ldflags", "-fsanitize=address")
+                target:add("shflags", "-fsanitize=address")
+            end
         end
     end)

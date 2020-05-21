@@ -1,30 +1,36 @@
+import("core.base.process")
+import("core.base.scheduler")
 
 local inftimeout = 5000
 
 function test_single_process(t)
 
-    -- single process test
     local stdout = os.tmpfile()
     local stderr = os.tmpfile()
-    for i = 1, 2 do
-        local proc = process.open("echo -n awd", {outpath = stdout, errpath = stderr})
-        proc:wait(inftimeout)
-        proc:close()
-        t:are_equal(io.readfile(stdout), "awd")
-    end
+    local proc = process.openv("xmake", {"lua", "print", "xmake"}, {stdout = stdout, stderr = stderr})
+    proc:wait(inftimeout)
+    proc:close()
+    t:are_equal(io.readfile(stdout):trim(), "xmake")
 end
 
-function test_hack(t)
+function test_sched_process(t)
 
-    t:will_raise(function ()
-        process.waitlist("awd", inftimeout)
+    local count = 0
+    local _session = function ()
+        local stdout = io.open(os.tmpfile(), 'w')
+        local stderr = io.open(os.tmpfile(), 'w')
+        local proc = process.openv("xmake", {"lua", "print", "xmake"}, {stdout = stdout, stderr = stderr})
+        local ok, status = proc:wait(inftimeout)
+        proc:close()
+        stdout:close()
+        stderr:close()
+        count = count + 1
+    end
+    scheduler.co_group_begin("test", function ()
+        for i = 1, 3 do
+            scheduler.co_start(_session)
+        end
     end)
-
-    t:will_raise(function ()
-        process.waitlist({}, inftimeout)
-    end)
-
-    t:will_raise(function ()
-        process.waitlist({"awd"}, inftimeout)
-    end)
+    scheduler.co_group_wait("test")
+    t:are_equal(count, 3)
 end

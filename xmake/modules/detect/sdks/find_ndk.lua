@@ -31,6 +31,9 @@ function _find_ndkdir(sdkdir)
     -- get ndk directory
     if not sdkdir then
         sdkdir = os.getenv("ANDROID_NDK_HOME") or os.getenv("ANDROID_NDK_ROOT")
+        if not sdkdir and config.get("android_sdk") then
+            sdkdir = path.join(config.get("android_sdk"), "ndk-bundle")
+        end
         if not sdkdir and is_host("macosx") then
             sdkdir = "~/Library/Android/sdk/ndk-bundle"
         end
@@ -49,7 +52,8 @@ function _find_ndk_sdkver(sdkdir, bindir, arch)
     local use_llvm = false
     local ndk_cxxstl = config.get("ndk_cxxstl")
     if ndk_cxxstl then
-        if ndk_cxxstl:startswith("llvmstl") then
+        -- we uses c++_static/c++_shared instead of llvmstl_static/llvmstl_shared
+        if ndk_cxxstl:startswith("c++") or ndk_cxxstl:startswith("llvmstl") then
             use_llvm = true
         end
     elseif bindir and bindir:find("llvm", 1, true) then
@@ -103,13 +107,16 @@ function _find_ndk(sdkdir, arch, ndk_sdkver, ndk_toolchains_ver)
     -- get cross
     local crosses = 
     {
-        ["armv5te"]     = "arm-linux-androideabi-"
-    ,   ["armv7-a"]     = "arm-linux-androideabi-"
+        ["armv5te"]     = "arm-linux-androideabi-" -- deprecated
+    ,   ["armv7-a"]     = "arm-linux-androideabi-" -- deprecated
+    ,   ["armeabi"]     = "arm-linux-androideabi-" -- removed in ndk r17
+    ,   ["armeabi-v7a"] = "arm-linux-androideabi-"
     ,   ["arm64-v8a"]   = "aarch64-linux-android-"
-    ,   i386            = "i686-linux-android-"
+    ,   i386            = "i686-linux-android-"    -- deprecated
+    ,   x86             = "i686-linux-android-"
     ,   x86_64          = "x86_64-linux-android-"
-    ,   mips            = "mips-linux-android-"
-    ,   mips64          = "mips64-linux-android-"
+    ,   mips            = "mips-linux-android-"    -- removed in ndk r17
+    ,   mips64          = "mips64-linux-android-"  -- removed in ndk r17
     }
     local cross = crosses[arch]
 
@@ -118,8 +125,11 @@ function _find_ndk(sdkdir, arch, ndk_sdkver, ndk_toolchains_ver)
     {
         ["armv5te"]     = "arm-linux-androideabi-*"
     ,   ["armv7-a"]     = "arm-linux-androideabi-*"
+    ,   ["armeabi"]     = "arm-linux-androideabi-*"
+    ,   ["armeabi-v7a"] = "arm-linux-androideabi-*"
     ,   ["arm64-v8a"]   = "aarch64-linux-android-*"
     ,   i386            = "x86-*"
+    ,   x86             = "x86-*"
     ,   x86_64          = "x86_64-*"
     ,   mips            = "mipsel-linux-android-*"
     ,   mips64          = "mips64el-linux-android-*"
@@ -153,15 +163,28 @@ function _find_ndk(sdkdir, arch, ndk_sdkver, ndk_toolchains_ver)
         return {}
     end
 
+    -- get ndk version, e.g. r16b, ..
+    local ndkver = nil
+    local ndk_version_header = path.join(sdkdir, "sysroot/usr/include/android/ndk-version.h")
+    if os.isfile(ndk_version_header) then
+        local ndk_version_info = io.readfile(ndk_version_header)
+        if ndk_version_info then
+            ndk_version_info = ndk_version_info:match("#define __NDK_MAJOR__ (%d+)")
+            if ndk_version_info then
+                ndkver = tonumber(ndk_version_info)
+            end
+        end
+    end
+
     -- ok?    
-    return {sdkdir = sdkdir, bindir = bindir, cross = cross, sdkver = sdkver, gcc_toolchain = gcc_toolchain, toolchains_ver = toolchains_ver}
+    return {ndkver = ndkver, sdkdir = sdkdir, bindir = bindir, cross = cross, sdkver = sdkver, gcc_toolchain = gcc_toolchain, toolchains_ver = toolchains_ver}
 end
 
 -- find ndk toolchains
 --
 -- @param sdkdir    the ndk directory
 -- @param opt       the argument options 
---                  e.g. {arch = "[armv5te|armv6|armv7-a|armv8-a|arm64-v8a]", verbose = true, force = false, sdkver = 19, toolchains_ver = "4.9"}  
+--                  e.g. {arch = "[armeabi|armeabi-v7a|arm64-v8a]", verbose = true, force = false, sdkver = 19, toolchains_ver = "4.9"}  
 --
 -- @return          the ndk toolchains. e.g. {bindir = .., cross = ..}
 --
@@ -193,6 +216,7 @@ function main(sdkdir, opt)
 
         -- save to config
         config.set("ndk", ndk.sdkdir, {force = true, readonly = true})
+        config.set("ndkver", ndk.ndkver, {force = true, readonly = true})
         config.set("ndk_sdkver", ndk.sdkver, {force = true, readonly = true})
         config.set("ndk_toolchains_ver", ndk.toolchains_ver, {force = true, readonly = true})
 

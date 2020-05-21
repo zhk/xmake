@@ -20,30 +20,30 @@
 
 -- imports
 import("core.project.project")
+import("core.base.hashset")
 
 -- a placeholder for spaces in path
 local space_placeholder = "\001"
 
 -- normailize path of a dependecy
-function _normailize_dep(dep)
-    
-    -- check
-    dep = dep:trim()
-    if #dep == 0 then
-        return nil
-    end
+function _normailize_dep(dep, projectdir)
     
     -- tranlate dep path
-    dep = path.relative(dep, project.directory())
-    dep = path.absolute(dep, project.directory())
+    if path.is_absolute(dep) then
+        dep = path.translate(dep)
+    else
+        dep = path.absolute(dep, projectdir)
+    end
 
     -- save it if belong to the project
-    if dep:startswith(os.projectdir()) then
-        return path.relative(dep, project.directory())
+    if dep:startswith(projectdir) then
+        return path.relative(dep, projectdir)
     end
 end
 
--- parse deps file (*.d)
+-- parse depsfiles from string
+--
+-- parse_deps(io.readfile(depfile, {continuation = "\\"}))
 --
 -- eg.
 -- strcpy.o: src/tbox/libc/string/strcpy.c src/tbox/libc/string/string.h \
@@ -54,29 +54,23 @@ end
 --  src/tbox/libc/string/../../prefix/../config.h \
 --  build/iphoneos/x86_64/release/tbox.config.h \
 --
-function main(depsfile)
+function main(depsdata)
 
-    -- get deps data
-    local depsdata = io.readfile(depsfile, { continuation = "\\"})
-    if not depsdata or #depsdata == 0 then
-        return {}
-    end
-
-    -- parse results
-    local results = {}
-    for _, line in ipairs(depsdata:split("\n", {plain = true})) do
-        local p = line:find(':', 1, true)
-        if p then
-            line = line:sub(p + 1)
-            line = line:gsub("\\ ", space_placeholder)
-            for _, includefile in ipairs(line:split("%s")) do
-                includefile = includefile:gsub(space_placeholder, " ")
-                includefile = _normailize_dep(includefile)
+    -- we assume there is only one valid line
+    local results = hashset.new()
+    local projectdir = os.projectdir()
+    local line = depsdata:rtrim() -- maybe there will be an empty newline at the end. so we trim it first
+    line = line:gsub("\\ ", space_placeholder)
+    for _, includefile in ipairs(line:split(' ', {plain = true})) do -- it will trim all internal spaces without `{strict = true}`
+        if not includefile:endswith(":") then -- ignore "xxx.o:" prefix 
+            includefile = includefile:gsub(space_placeholder, ' ')
+            if #includefile > 0 then
+                includefile = _normailize_dep(includefile, projectdir)
                 if includefile then
-                    table.insert(results, includefile)
+                    results:insert(includefile)
                 end
             end
         end
     end
-    return table.unique(results)
+    return results:to_array()
 end

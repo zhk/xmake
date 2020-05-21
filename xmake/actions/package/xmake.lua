@@ -41,10 +41,11 @@ task("package")
                 -- options
             ,   options = 
                 {
-                    {'o', "outputdir",  "kv", nil,          "Set the output directory."                                     }
-                ,   {'a', "all",        "k",  nil,          "Package all targets."                                          }
+                    {'o', "outputdir",  "kv", nil   , "Set the output directory."                                     }
+                ,   {'a', "all",        "k",  nil   , "Package all targets."                                          }
                 ,   {}
-                ,   {nil, "target",     "v",  nil,          "Package a given target."                                       }   
+                ,   {nil, "target",     "v",  nil   , "The target name. It will package all default targets if this parameter is not specified."
+                                                    , values = function () return try{ function () return table.keys(import("core.project.project").targets()) end } end }
                 }
             } 
 

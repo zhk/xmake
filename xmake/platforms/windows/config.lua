@@ -30,9 +30,6 @@ import("private.platform.check_toolchain")
 -- get toolchains
 function _toolchains()
 
-    -- init cross
-    local cross = "xcrun -sdk macosx "
-
     -- init toolchains
     local cc         = toolchain("the c compiler")
     local cxx        = toolchain("the c++ compiler")
@@ -131,7 +128,12 @@ function main(platform, name)
         check_arch(config)
 
         -- check vstudio
-        check_vstudio(config)
+        local cc  = path.basename(config.get("cc") or "cl"):lower()
+        local cxx = path.basename(config.get("cxx") or "cl"):lower()
+        local mrc = path.basename(config.get("mrc") or "rc"):lower()
+        if cc == "cl" or cxx == "cl" or mrc == "rc" then
+            check_vstudio(config)
+        end
     end
 end
 

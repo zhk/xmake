@@ -23,33 +23,33 @@ theme("default")
 
     -- the success status 
     set_text("success", "$ok")
-    set_color("success", "green")
+    set_color("success", "green bright")
 
     -- the failure status 
-    set_text("failure", "failed")
-    set_color("failure", "red")
+    set_text("failure", "$failed")
+    set_color("failure", "red bright")
 
     -- the nothing status 
-    set_text("nothing", "no")
-    set_color("nothing", "red")
+    set_text("nothing", "$no")
+    set_color("nothing", "red bright")
 
     -- the error info
-    set_text("error", "error")
-    set_color("error", "red")
+    set_text("error", "$error")
+    set_color("error", "red bright")
 
     -- the warning info
     set_text("warning", "$warning")
-    set_color("warning", "yellow")
+    set_color("warning", "yellow bright")
 
     -- the building progress
     set_text("build.progress_format", "[%3d%%]")
-    set_color("build.progress", "green")
+    set_color("build.progress", "green bright")
 
     -- the building object file
     set_color("build.object", "")
 
     -- the building target file
-    set_color("build.target", "magenta")
+    set_color("build.target", "magenta bright")
 
     -- color dump
     set_text("dump.default_format", "%s")
@@ -65,10 +65,16 @@ theme("default")
     set_color("dump.string", "magenta bright")
     set_color("dump.string_quote", "magenta")
     set_color("dump.keyword", "blue")
-    set_color("dump.number", "green")
+    set_color("dump.number", "green bright")
     set_color("dump.function", "cyan")
 
     -- menu
     set_color("menu.main.task.name", "magenta")
     set_color("menu.option.name", "green")
     set_color("menu.usage", "cyan")
+
+    -- interactive mode
+    set_text("interactive.prompt", "xmake>")
+    set_text("interactive.prompt2", "xmake>>")
+    set_color("interactive.prompt", "green")
+    set_color("interactive.prompt2", "green")

@@ -2,6 +2,87 @@
 
 ## master (unreleased)
 
+### New features
+
+* [#630](https://github.com/xmake-io/xmake/issues/630): Support *BSD system, e.g. FreeBSD, ..
+* Add wprint builtin api to show warnings
+* [#784](https://github.com/xmake-io/xmake/issues/784): Add `set_policy()` to set and modify some builtin policies
+
+### Change
+
+* [#771](https://github.com/xmake-io/xmake/issues/771): Check includedirs, linkdirs and frameworkdirs
+* [#774](https://github.com/xmake-io/xmake/issues/774): Support ltui windows resize for `xmake f --menu`
+* [#782](https://github.com/xmake-io/xmake/issues/782): Add check flags failed tips for add_cxflags, ..
+
+### Bug fixed
+
+* [#786](https://github.com/xmake-io/xmake/issues/786): Fix check header file deps
+
+## v2.3.3
+
+### New features
+
+* [#727](https://github.com/xmake-io/xmake/issues/727): Strip and generate debug symbols file (.so/.dSYM) for android/ios program
+* [#687](https://github.com/xmake-io/xmake/issues/687): Support to generate objc/bundle program.
+* [#743](https://github.com/xmake-io/xmake/issues/743): Support to generate objc/framework program.
+* Support to compile bundle, framework, mac application and ios application, and all some project templates
+* Support generate ios *.ipa file and codesign
+* Add xmake.cli rule to develop lua program with xmake core engine
+
+### Change
+
+* [#750](https://github.com/xmake-io/xmake/issues/750): Improve qt.widgetapp rule to support private slot
+* Improve Qt/deploy for android and support Qt 5.14.0
+
+## v2.3.2
+
+### New features
+
+* Add powershell theme for powershell terminal
+* Add `xmake --dry-run -v` to dry run building target and only show verbose build command.
+* [#712](https://github.com/xmake-io/xmake/issues/712): Add sdcc platform and support sdcc compiler
+
+### Change
+
+* [#589](https://github.com/xmake-io/xmake/issues/589): Improve and optimize build speed, supports parallel compilation and linking across targets
+* Improve the ninja/cmake generator
+* [#728](https://github.com/xmake-io/xmake/issues/728): Improve os.cp to support reserve source directory structure
+* [#732](https://github.com/xmake-io/xmake/issues/732): Improve find_package to support `homebrew/cmake` pacakges
+* [#695](https://github.com/xmake-io/xmake/issues/695): Improve android abi
+
+### Bugs fixed
+
+* Fix the link errors output issues for msvc
+* [#718](https://github.com/xmake-io/xmake/issues/718): Fix download cache bug for package
+* [#722](https://github.com/xmake-io/xmake/issues/722): Fix invalid package deps
+* [#719](https://github.com/xmake-io/xmake/issues/719): Fix process exit bug
+* [#720](https://github.com/xmake-io/xmake/issues/720): Fix compile_commands generator
+
+## v2.3.1
+
+### New features
+
+* [#675](https://github.com/xmake-io/xmake/issues/675): Support to compile `*.c` as c++, `add_files("*.c", {sourcekind = "cxx"})`.
+* [#681](https://github.com/xmake-io/xmake/issues/681): Support compile xmake on msys/cygwin and add msys/cygwin platform
+* Add socket/pipe io modules and support to schedule socket/process/pipe in coroutine
+* [#192](https://github.com/xmake-io/xmake/issues/192): Try building project with the third-party buildsystem
+* Enable color diagnostics output for gcc/clang
+* [#588](https://github.com/xmake-io/xmake/issues/588): Improve project generator, `xmake project -k ninja`, support for build.ninja
+
+### Change
+
+* [#665](https://github.com/xmake-io/xmake/issues/665): Support to parse *nix style command options, thanks [@OpportunityLiu](https://github.com/OpportunityLiu)
+* [#673](https://github.com/xmake-io/xmake/pull/673): Improve tab complete to support argument values
+* [#680](https://github.com/xmake-io/xmake/issues/680): Improve get.sh scripts and add download mirrors
+* Improve process scheduler
+* [#651](https://github.com/xmake-io/xmake/issues/651): Improve os/io module syserrors tips
+
+### Bugs fixed
+
+* Fix incremental compilation for checking the dependent file 
+* Fix log output for parsing xmake-vscode/problem info
+* [#684](https://github.com/xmake-io/xmake/issues/684): Fix linker errors for android ndk on windows
+
 ## v2.2.9
 
 ### New features
@@ -655,6 +736,88 @@
 # 更新日志
 
 ## master (开发中)
+
+### 新特性
+
+* [#630](https://github.com/xmake-io/xmake/issues/630): 支持*BSD系统，例如：FreeBSD, ..
+* 添加wprint接口去显示警告信息
+* [#784](https://github.com/xmake-io/xmake/issues/784): 添加`set_policy()`去设置修改一些内置的策略，比如：禁用自动flags检测和映射
+
+### 改进
+
+* [#771](https://github.com/xmake-io/xmake/issues/771): 检测includedirs,linkdirs和frameworkdirs的输入有效性
+* [#774](https://github.com/xmake-io/xmake/issues/774): `xmake f --menu`可视化配置菜单支持窗口大小Resize调整
+* [#782](https://github.com/xmake-io/xmake/issues/782): 添加add_cxflags等配置flags自动检测失败提示
+
+### Bugs修复
+
+* [#786](https://github.com/xmake-io/xmake/issues/786): Fix check header file deps
+
+## v2.3.3
+
+### 新特性
+
+* [#727](https://github.com/xmake-io/xmake/issues/727): 支持为android, ios程序生成.so/.dSYM符号文件
+* [#687](https://github.com/xmake-io/xmake/issues/687): 支持编译生成objc/bundle程序
+* [#743](https://github.com/xmake-io/xmake/issues/743): 支持编译生成objc/framework程序
+* 支持编译bundle, framework程序，以及mac, ios应用程序，并新增一些工程模板
+* 支持对ios应用程序打包生成ipa文件，以及代码签名支持
+* 增加一些ipa打包、安装、重签名等辅助工具
+* 添加xmake.cli规则来支持开发带有xmake/core引擎的lua扩展程序
+
+### 改进
+
+* [#750](https://github.com/xmake-io/xmake/issues/750): 改进qt.widgetapp规则，支持qt私有槽
+* 改进Qt/android的apk部署，并且支持Qt5.14.0新版本sdk
+
+## v2.3.2
+
+### 新特性
+
+* 添加powershell色彩主题用于powershell终端下背景色显示
+* 添加`xmake --dry-run -v`命令去空运行构建，仅仅为了查看详细的构建命令
+* [#712](https://github.com/xmake-io/xmake/issues/712): 添加sdcc平台，并且支持sdcc编译器
+
+### 改进
+
+* [#589](https://github.com/xmake-io/xmake/issues/589): 改进优化构建速度，支持跨目标间并行编译和link，编译速度和ninja基本持平
+* 改进ninja/cmake工程文件生成器插件
+* [#728](https://github.com/xmake-io/xmake/issues/728): 改进os.cp支持保留源目录结构层级的递归复制
+* [#732](https://github.com/xmake-io/xmake/issues/732): 改进find_package支持查找homebrew/cmake安装的包
+* [#695](https://github.com/xmake-io/xmake/issues/695): 改进采用android ndk最新的abi命名
+
+### Bugs修复
+
+* 修复windows下link error显示问题
+* [#718](https://github.com/xmake-io/xmake/issues/718): 修复依赖包下载在多镜像时一定概率缓存失效问题
+* [#722](https://github.com/xmake-io/xmake/issues/722): 修复无效的包依赖导致安装死循环问题
+* [#719](https://github.com/xmake-io/xmake/issues/719): 修复windows下主进程收到ctrlc后，.bat子进程没能立即退出的问题
+* [#720](https://github.com/xmake-io/xmake/issues/720): 修复compile_commands生成器的路径转义问题
+
+## v2.3.1
+
+### 新特性
+
+* [#675](https://github.com/xmake-io/xmake/issues/675): 支持通过设置强制将`*.c`作为c++代码编译, `add_files("*.c", {sourcekind = "cxx"})`。
+* [#681](https://github.com/xmake-io/xmake/issues/681): 支持在msys/cygwin上编译xmake，以及添加msys/cygwin编译平台
+* 添加socket/pipe模块，并且支持在协程中同时调度process/socket/pipe
+* [#192](https://github.com/xmake-io/xmake/issues/192): 尝试构建带有第三方构建系统的项目，还支持autotools项目的交叉编译
+* 启用gcc/clang的编译错误色彩高亮输出
+* [#588](https://github.com/xmake-io/xmake/issues/588): 改进工程生成插件`xmake project -k ninja`，增加对build.ninja生成支持
+
+### 改进
+
+* [#665](https://github.com/xmake-io/xmake/issues/665): 支持 *nix style 的参数输入，感谢[@OpportunityLiu](https://github.com/OpportunityLiu)的贡献
+* [#673](https://github.com/xmake-io/xmake/pull/673): 改进tab命令补全，增加对参数values的补全支持
+* [#680](https://github.com/xmake-io/xmake/issues/680): 优化get.sh安装脚本，添加国内镜像源，加速下载
+* 改进process调度器
+* [#651](https://github.com/xmake-io/xmake/issues/651): 改进os/io模块系统操作错误提示
+
+### Bugs修复
+
+* 修复增量编译检测依赖文件的一些问题
+* 修复log输出导致xmake-vscode插件解析编译错误信息失败问题
+* [#684](https://github.com/xmake-io/xmake/issues/684): 修复windows下android ndk的一些linker错误
 
 ## v2.2.9
 

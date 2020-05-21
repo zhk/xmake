@@ -92,7 +92,7 @@ end
 
 -- make the compile arguments list
 function _compargv1(self, sourcefile, objectfile, flags)
-    return self:program(), table.join("-c", flags, "-Fo" .. objectfile, sourcefile)
+    return self:program(), table.join("-c", flags, "-Fo" .. os.args(objectfile), sourcefile)
 end
 
 -- compile the source file
@@ -101,8 +101,28 @@ function _compile1(self, sourcefile, objectfile, dependinfo, flags)
     -- ensure the object directory
     os.mkdir(path.directory(objectfile))
 
-    -- use vstool to compile and enable vs_unicode_output @see https://github.com/xmake-io/xmake/issues/528
-    vstool.runv(_compargv1(self, sourcefile, objectfile, flags))
+    try
+    {
+        function ()
+            -- @note we need not uses vstool.runv to enable unicode output for ml.exe
+            os.runv(_compargv1(self, sourcefile, objectfile, flags))
+        end,
+        catch
+        {
+            function (errors)
+
+                -- use link/stdout as errors first from vstool.iorunv()
+                if type(errors) == "table" then
+                    local errs = errors.stdout or ""
+                    if #errs:trim() == 0 then
+                        errs = errors.stderr or ""
+                    end
+                    errors = errs
+                end
+                raise(tostring(errors))
+            end
+        }
+    }
 end
 
 -- make the compile arguments list

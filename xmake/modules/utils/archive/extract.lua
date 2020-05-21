@@ -26,6 +26,7 @@ import("detect.tools.find_7z")
 import("detect.tools.find_tar")
 import("detect.tools.find_gzip")
 import("detect.tools.find_unzip")
+import("extension", {alias = "get_archive_extension"})
 
 -- extract archivefile using tar
 function _extract_using_tar(archivefile, outputdir, extension, opt)
@@ -95,7 +96,7 @@ function _extract_using_7z(archivefile, outputdir, extension, opt)
     local outputdir_old = nil
     if extension:startswith(".tar.") then
         outputdir_old = outputdir
-        outputdir = os.tmpfile() .. ".tar"
+        outputdir = os.tmpfile({ramdisk = false}) .. ".tar"
     end
 
     -- init argv
@@ -156,7 +157,7 @@ function _extract_using_gzip(archivefile, outputdir, extension, opt)
     local outputdir_old = nil
     if extension:startswith(".tar.") then
         outputdir_old = outputdir
-        outputdir = os.tmpfile() .. ".tar"
+        outputdir = os.tmpfile({ramdisk = false}) .. ".tar"
     end
 
     -- init temporary archivefile
@@ -213,7 +214,7 @@ function _extract_using_xz(archivefile, outputdir, extension, opt)
     local outputdir_old = nil
     if extension:startswith(".tar.") then
         outputdir_old = outputdir
-        outputdir = os.tmpfile() .. ".tar"
+        outputdir = os.tmpfile({ramdisk = false}) .. ".tar"
     end
 
     -- init temporary archivefile
@@ -270,7 +271,7 @@ function _extract_using_unzip(archivefile, outputdir, extension, opt)
     local outputdir_old = nil
     if extension:startswith(".tar.") then
         outputdir_old = outputdir
-        outputdir = os.tmpfile() .. ".tar"
+        outputdir = os.tmpfile({ramdisk = false}) .. ".tar"
     end
 
     -- init argv
@@ -326,29 +327,6 @@ function _extract(archivefile, outputdir, extension, extractors, opt)
     return false
 end
 
--- get the extension of the archive file
-function _extension(archivefile, extractors)
- 
-    -- get archive file name
-    local filename = path.filename(archivefile)
-
-    -- get extension
-    local extension = ""
-    local i = filename:find_last(".", true)
-    if i then
-
-        -- get next extension if exists
-        local p = filename:sub(1, i - 1):find_last(".", true)
-        if p and extractors[filename:sub(p)] then i = p end
-
-        -- ok
-        extension = filename:sub(i)
-    end
-
-    -- ok?
-    return extension
-end
-
 -- extract archive file
 --
 -- @param archivefile   the archive file. e.g. *.tar.gz, *.zip, *.7z, *.tar.bz2, ..
@@ -379,7 +357,7 @@ function main(archivefile, outputdir, opt)
     }
     
     -- get extension
-    local extension = _extension(archivefile, extractors)
+    local extension = opt.extension or get_archive_extension(archivefile)
 
     -- extract it
     return _extract(archivefile, outputdir, extension, extractors[extension], opt)

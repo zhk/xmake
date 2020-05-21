@@ -79,7 +79,7 @@ function _on_run_target(target)
     for _, r in ipairs(target:orderules()) do
         local on_run = r:script("run")
         if on_run then
-            on_run(target, {origin = _do_run_target})
+            on_run(target)
             done = true
         end
     end
@@ -141,20 +141,13 @@ function _run(target)
     for i = 1, 5 do
         local script = scripts[i]
         if script ~= nil then
-            script(target, {origin = (i == 3 and _do_run_target or nil)})
+            script(target)
         end
     end
 
     -- leave the environments of the target packages
     for name, values in pairs(oldenvs) do
         os.setenv(name, values)
-    end
-end
-
--- run the all dependent targets
-function _run_deps(target)
-    for _, dep in ipairs(target:orderdeps()) do
-        _run(dep)
     end
 end
 
@@ -212,14 +205,12 @@ function main()
 
     -- run the given target?
     if targetname then
-        _run_deps(project.target(targetname))
         _run(project.target(targetname))
     else
         -- run default or all binary targets
         for _, target in pairs(project.targets()) do
             local default = target:get("default")
             if (default == nil or default == true or option.get("all")) and target:targetkind() == "binary" then
-                _run_deps(target)
                 _run(target)
             end
         end

@@ -22,8 +22,14 @@
 local sandbox_core_base_scheduler = sandbox_core_base_scheduler or {}
 
 -- load modules
+local poller    = require("base/poller")
 local scheduler = require("base/scheduler")
 local raise     = require("sandbox/modules/raise")
+
+-- the poller object type
+sandbox_core_base_scheduler.OT_SOCK = poller.OT_SOCK
+sandbox_core_base_scheduler.OT_PIPE = poller.OT_PIPE
+sandbox_core_base_scheduler.OT_PROC = poller.OT_PROC
 
 -- start a new coroutine task 
 function sandbox_core_base_scheduler.co_start(cotask, ...)
@@ -53,6 +59,48 @@ function sandbox_core_base_scheduler.co_suspend(...)
     return scheduler:co_suspend(...)
 end
 
+-- yield the current coroutine
+function sandbox_core_base_scheduler.co_yield()
+    local ok, errors = scheduler:co_yield()
+    if not ok then
+        raise(errors)
+    end
+end
+
+-- sleep some times (ms)
+function sandbox_core_base_scheduler.co_sleep(ms)
+    local ok, errors = scheduler:co_sleep(ms)
+    if not ok then
+        raise(errors)
+    end
+end
+
+-- get coroutine group with the given name
+function sandbox_core_base_scheduler.co_group(name)
+    return scheduler:co_group(name)
+end
+
+-- begin coroutine group with the given name
+function sandbox_core_base_scheduler.co_group_begin(name, scopefunc)
+    local ok, errors = scheduler:co_group_begin(name, scopefunc)
+    if not ok then
+        raise(errors)
+    end
+end
+
+-- wait for finishing the given coroutine group
+function sandbox_core_base_scheduler.co_group_wait(name, opt)
+    local ok, errors = scheduler:co_group_wait(name, opt)
+    if not ok then
+        raise(errors)
+    end
+end
+
+-- get the waiting poller objects of the given coroutine group
+function sandbox_core_base_scheduler.co_group_waitobjs(name)
+    return scheduler:co_group_waitobjs(name)
+end
+
 -- get the current running coroutine 
 function sandbox_core_base_scheduler.co_running()
     return scheduler:co_running()
@@ -61,31 +109,6 @@ end
 -- get the all coroutine task count
 function sandbox_core_base_scheduler.co_count()
     return scheduler:co_count()
-end
-
--- sleep some times (ms)
-function sandbox_core_base_scheduler.sleep(ms)
-    local ok, errors = scheduler:sleep(ms)
-    if not ok then
-        raise(errors)
-    end
-end
-
-
--- stop loop
-function sandbox_core_base_scheduler.stop()
-    local ok, errors = scheduler:stop()
-    if not ok then
-        raise(errors)
-    end
-end
-
--- run loop
-function sandbox_core_base_scheduler.runloop()
-    local ok, errors = scheduler:runloop()
-    if not ok then
-        raise(errors)
-    end
 end
 
 -- return module

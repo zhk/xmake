@@ -35,7 +35,7 @@
     <a href="https://jq.qq.com/?_wv=1027&k=5hpwWFv">
       <img src="https://img.shields.io/badge/chat-on%20QQ-ff69b4.svg?style=flat-square" alt="QQ" />
     </a>
-    <a href="http://xmake.io/pages/donation.html#donate">
+    <a href="https://xmake.io/#/zh-cn/about/sponsor">
       <img src="https://img.shields.io/badge/donate-us-orange.svg?style=flat-square" alt="Donate" />
     </a>
   </div>
@@ -70,19 +70,19 @@ xmake的目标是开发者更加关注于项目本身开发，简化项目的描
 #### 使用curl
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/xmake-io/xmake/master/scripts/get.sh)
+bash <(curl -fsSL https://xmake.io/shget.text)
 ```
 
 #### 使用wget
 
 ```bash
-bash <(wget https://raw.githubusercontent.com/xmake-io/xmake/master/scripts/get.sh -O -)
+bash <(wget https://xmake.io/shget.text -O -)
 ```
 
 #### 使用powershell
 
-```bash
-Invoke-Expression (Invoke-Webrequest 'https://raw.githubusercontent.com/xmake-io/xmake/master/scripts/get.ps1' -UseBasicParsing).Content
+```powershell
+Invoke-Expression (Invoke-Webrequest 'https://xmake.io/psget.text' -UseBasicParsing).Content
 ```
 
 ## 简单的工程描述
@@ -128,6 +128,29 @@ $ xmake f --menu
 
 <img src="https://xmake.io/assets/img/index/menuconf.png" width="650px" />
 
+## 跟ninja一样快的构建速度
+
+测试工程: [xmake-core](https://github.com/xmake-io/xmake/tree/master/core)
+
+### 多任务并行编译测试
+
+| 构建系统        | Termux (8core/-j12) | 构建系统         | MacOS (8core/-j12) |
+|-----            | ----                | ---              | ---                |
+|xmake            | 24.890s             | xmake            | 12.264s            |
+|ninja            | 25.682s             | ninja            | 11.327s            |
+|cmake(gen+make)  | 5.416s+28.473s      | cmake(gen+make)  | 1.203s+14.030s     |
+|cmake(gen+ninja) | 4.458s+24.842s      | cmake(gen+ninja) | 0.988s+11.644s     |
+
+### 单任务编译测试
+
+| 构建系统        | Termux (-j1)     | 构建系统         | MacOS (-j1)    |
+|-----            | ----             | ---              | ---            |
+|xmake            | 1m57.707s        | xmake            | 39.937s        |
+|ninja            | 1m52.845s        | ninja            | 38.995s        |
+|cmake(gen+make)  | 5.416s+2m10.539s | cmake(gen+make)  | 1.203s+41.737s |
+|cmake(gen+ninja) | 4.458s+1m54.868s | cmake(gen+ninja) | 0.988s+38.022s |
+
+
 ## 包依赖管理
 
 ### 下载和编译
@@ -141,12 +164,17 @@ $ xmake f --menu
 ## 支持平台
 
 * Windows (x86, x64)
-* Macosx (i386, x86_64)
-* Linux (i386, x86_64, cross-toolchains ...)
-* Android (armv5te, armv6, armv7-a, armv8-a, arm64-v8a)
-* iPhoneOS (armv7, armv7s, arm64, i386, x86_64)
+* macOS (i386, x86_64)
+* Linux (i386, x86_64, cross-toolchains ..)
+* *BSD (i386, x86_64)
+* Android (x86, x86_64, armeabi, armeabi-v7a, arm64-v8a)
+* iOS (armv7, armv7s, arm64, i386, x86_64)
 * WatchOS (armv7k, i386)
-* Mingw (i386, x86_64)
+* MSYS (i386, x86_64)
+* MinGW (i386, x86_64)
+* Cygwin (i386, x86_64)
+* SDCC (stm8, mcs51, ..)
+* Cross (cross-toolchains ..)
 
 ## 支持语言
 
@@ -169,62 +197,8 @@ $ xmake f --menu
 * WDK驱动程序
 * WinSDK应用程序
 * MFC应用程序
-
-## 内置插件
-
-#### 生成IDE工程文件插件（makefile, vs2002 - vs2019, ...）
-
-```bash
-$ xmake project -k vs2017 -m "debug,release"
-$ xmake project -k cmakelists
-$ xmake project -k compile_commands
-```
-
-#### 宏记录脚本和回放插件
-
-```bash
-$ xmake m -b                        # 开始记录
-$ xmake f -p iphoneos -m debug
-$ xmake 
-$ xmake f -p android --ndk=~/files/android-ndk-r16b
-$ xmake
-$ xmake m -e                        # 结束记录
-$ xmake m .                         # 回放命令
-```
-
-#### 加载自定义lua脚本插件
-
-```bash
-$ xmake l ./test.lua
-$ xmake l -c "print('hello xmake!')"
-$ xmake l lib.detect.find_tool gcc
-```
-
-#### 生成doxygen文档插件
-
-```bash
-$ xmake doxygen [srcdir]
-```
-
-## 更多插件
-
-请到插件仓库进行下载安装: [xmake-plugins](https://github.com/xmake-io/xmake-plugins).
-
-## IDE和编辑器插件
-
-* [xmake-vscode](https://github.com/xmake-io/xmake-vscode)
-
-<img src="https://raw.githubusercontent.com/tboox/xmake-vscode/master/res/problem.gif" width="650px" />
-
-* [xmake-sublime](https://github.com/xmake-io/xmake-sublime)
-
-<img src="https://raw.githubusercontent.com/tboox/xmake-sublime/master/res/problem.gif" width="650px" />
-
-* [xmake-idea](https://github.com/xmake-io/xmake-idea)
-
-<img src="https://raw.githubusercontent.com/tboox/xmake-idea/master/res/problem.gif" width="650px" />
-
-* [xmake.vim](https://github.com/luzhlon/xmake.vim) (third-party, thanks [@luzhlon](https://github.com/luzhlon))
+* iOS/MacOS应用程序
+* Framework和Bundle程序（iOS/MacOS）
 
 ## 更多例子
 
@@ -241,37 +215,169 @@ target("console")
     end
 ```
 
-下载和使用在[xmake-repo](https://github.com/xmake-io/xmake-repo)的依赖包：
-
-```lua
-add_requires("libuv master", "ffmpeg", "zlib 1.20.*")
-add_requires("tbox >1.6.1", {optional = true, debug = true})
-target("test")
-    set_kind("shared")
-    add_files("src/*.c")
-    add_packages("libuv", "ffmpeg", "tbox", "zlib")
-```
-
-下载和使用第三方包管理器的依赖包：
-
-```lua
-add_requires("brew::pcre2/libpcre2-8", {alias = "pcre2"})
-add_requires("conan::OpenSSL/1.0.2n@conan/stable", {alias = "openssl"}) 
-target("test")
-    set_kind("shared")
-    add_files("src/*.c")
-    add_packages("pcre2", "openssl")
-```
-
-查找和使用本地已安装的包：
+自定义脚本:
 
 ```lua
 target("test")
-    set_kind("shared")
+    set_kind("binary")
     add_files("src/*.c")
-    on_load(function (target)
-        target:add(find_packages("zlib", "openssl", "brew::pcre2/libpcre2-8", "conan::OpenSSL/1.0.2n@conan/stable"))
+    after_build(function (target)
+        print("hello: %s", target:name())
+        os.exec("echo %s", target:targetfile())
     end)
+```
+
+下载和使用在[xmake-repo](https://github.com/xmake-io/xmake-repo)和第三方包仓库的依赖包：
+
+```lua
+add_requires("tbox >1.6.1", "libuv master", "vcpkg::ffmpeg", "brew::pcre2/libpcre2-8")
+add_requires("conan::OpenSSL/1.0.2n@conan/stable", {alias = "openssl", optional = true, debug = true}) 
+target("test")
+    set_kind("binary")
+    add_files("src/*.c")
+    add_packages("tbox", "libuv", "vcpkg::ffmpeg", "brew::pcre2/libpcre2-8", "openssl")
+```
+
+Qt QuickApp应用程序:
+
+```lua
+target("test")
+    add_rules("qt.quickapp")
+    add_files("src/*.cpp")
+    add_files("src/qml.qrc")
+```
+
+Cuda程序:
+
+```lua
+target("test")
+    set_kind("binary")
+    add_files("src/*.cu")
+    add_cugencodes("native")
+    add_cugencodes("compute_30")
+```
+
+WDK/UMDF驱动程序:
+
+```lua
+target("echo")
+    add_rules("wdk.driver", "wdk.env.umdf")
+    add_files("driver/*.c") 
+    add_files("driver/*.inx")
+    add_includedirs("exe")
+
+target("app")
+    add_rules("wdk.binary", "wdk.env.umdf")
+    add_files("exe/*.cpp")
+```
+
+更多WDK驱动程序例子(umdf/kmdf/wdm)，见：[WDK工程例子](https://xmake.io/#/zh-cn/guide/project_examples?id=wdk%e9%a9%b1%e5%8a%a8%e7%a8%8b%e5%ba%8f)
+
+iOS/MacOS应用程序:
+
+```lua
+target("test")
+    add_rules("xcode.application")
+    add_files("src/*.m", "src/**.storyboard", "src/*.xcassets")
+    add_files("src/Info.plist")
+```
+
+Framework和Bundle程序（iOS/MacOS）:
+
+```lua
+target("test")
+    add_rules("xcode.framework") -- 或者 xcode.bundle
+    add_files("src/*.m")
+    add_files("src/Info.plist")
+```
+
+## 插件
+
+#### 生成IDE工程文件插件（makefile, vs2002 - vs2019, ...）
+
+```bash
+$ xmake project -k vsxmake -m "debug;release" # 新版vs工程生成插件（推荐）
+$ xmake project -k vs -m "debug;release"
+$ xmake project -k cmake
+$ xmake project -k ninja
+$ xmake project -k compile_commands
+```
+
+#### 加载自定义lua脚本插件
+
+```bash
+$ xmake l ./test.lua
+$ xmake l -c "print('hello xmake!')"
+$ xmake l lib.detect.find_tool gcc
+$ xmake l
+> print("hello xmake!")
+> {1, 2, 3}
+< { 
+    1,
+    2,
+    3 
+  }
+```
+
+更多内置插件见相关文档：[内置插件文档](https://xmake.io/#/zh-cn/plugin/builtin_plugins)
+
+其他扩展插件，请到插件仓库进行下载安装: [xmake-plugins](https://github.com/xmake-io/xmake-plugins).
+
+## IDE和编辑器插件
+
+* [xmake-vscode](https://github.com/xmake-io/xmake-vscode)
+
+<img src="https://raw.githubusercontent.com/xmake-io/xmake-vscode/master/res/problem.gif" width="650px" />
+
+* [xmake-sublime](https://github.com/xmake-io/xmake-sublime)
+
+<img src="https://raw.githubusercontent.com/xmake-io/xmake-sublime/master/res/problem.gif" width="650px" />
+
+* [xmake-idea](https://github.com/xmake-io/xmake-idea)
+
+<img src="https://raw.githubusercontent.com/xmake-io/xmake-idea/master/res/problem.gif" width="650px" />
+
+* [xmake.vim](https://github.com/luzhlon/xmake.vim) (third-party, thanks [@luzhlon](https://github.com/luzhlon))
+
+### XMake Gradle插件 (JNI)
+
+我们也可以在Gradle中使用[xmake-gradle](https://github.com/xmake-io/xmake-gradle)插件来集成编译JNI库
+
+```
+plugins {
+  id 'org.tboox.gradle-xmake-plugin' version '1.0.6'
+}
+
+android {
+    externalNativeBuild {
+        xmake {
+            path "jni/xmake.lua"
+        }
+    }
+}
+```
+
+当`gradle-xmake-plugin`插件被应用生效后，`xmakeBuild`任务会自动注入到现有的`assemble`任务中去，自动执行jni库编译和集成。
+
+```console
+$ ./gradlew app:assembleDebug
+> Task :nativelib:xmakeConfigureForArm64
+> Task :nativelib:xmakeBuildForArm64
+>> xmake build
+[ 50%]: ccache compiling.debug nativelib.cc
+[ 75%]: linking.debug libnativelib.so
+[100%]: build ok!
+>> install artifacts to /Users/ruki/projects/personal/xmake-gradle/nativelib/libs/arm64-v8a
+> Task :nativelib:xmakeConfigureForArmv7
+> Task :nativelib:xmakeBuildForArmv7
+>> xmake build
+[ 50%]: ccache compiling.debug nativelib.cc
+[ 75%]: linking.debug libnativelib.so
+[100%]: build ok!
+>> install artifacts to /Users/ruki/projects/personal/xmake-gradle/nativelib/libs/armeabi-v7a
+> Task :nativelib:preBuild
+> Task :nativelib:assemble
+> Task :app:assembleDebug
 ```
 
 ## 项目例子
@@ -296,7 +402,7 @@ target("test")
 * 社区：[Reddit论坛](https://www.reddit.com/r/tboox/)
 * 聊天：[Telegram群组](https://t.me/tbooxorg), [Gitter聊天室](https://gitter.im/tboox/tboox?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 * 源码：[Github](https://github.com/xmake-io/xmake), [Gitee](https://gitee.com/tboox/xmake)
-* QQ群：343118190(满), 662147501
+* QQ群：343118190(技术支持), 662147501
 * 微信公众号：tboox-os
  
 ## 感谢

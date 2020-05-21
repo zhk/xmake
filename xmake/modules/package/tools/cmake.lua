@@ -93,8 +93,8 @@ function install(package, configs, opt)
     -- @see https://cmake.org/cmake/help/v3.14/module/GNUInstallDirs.html
     -- LIBDIR: object code libraries (lib or lib64 or lib/<multiarch-tuple> on Debian)
     -- 
-    local argv = {"-DCMAKE_INSTALL_PREFIX=" .. path.absolute("install"), "-DDCMAKE_INSTALL_LIBDIR=" .. path.absolute("install/lib")}
-    if is_plat("windows") and is_arch("x64") then
+    local argv = {"-DCMAKE_INSTALL_PREFIX=" .. path.absolute("install"), "-DCMAKE_INSTALL_LIBDIR=" .. path.absolute("install/lib")}
+    if package:is_plat("windows") and package:is_arch("x64") then
         table.insert(argv, "-A")
         table.insert(argv, "x64")
     end
@@ -116,13 +116,13 @@ function install(package, configs, opt)
     os.vrunv("cmake", argv, {envs = opt.envs or buildenvs(package)})
 
     -- do build and install
-    if is_host("windows") then
+    if package:is_plat("windows") then
         local slnfile = assert(find_file("*.sln", os.curdir()), "*.sln file not found!")
-        os.vrun("msbuild \"%s\" -nologo -t:Rebuild -p:Configuration=%s -p:Platform=%s", slnfile, package:debug() and "Debug" or "Release", is_arch("x64") and "x64" or "Win32")
+        os.vrun("msbuild \"%s\" -nologo -t:Rebuild -p:Configuration=%s -p:Platform=%s", slnfile, package:debug() and "Debug" or "Release", package:is_arch("x64") and "x64" or "Win32")
         local projfile = os.isfile("INSTALL.vcxproj") and "INSTALL.vcxproj" or "INSTALL.vcproj"
         if os.isfile(projfile) then
             os.vrun("msbuild \"%s\" /property:configuration=%s", projfile, package:debug() and "Debug" or "Release")
-            os.cp("install/lib", package:installdir())
+            os.trycp("install/lib", package:installdir()) -- perhaps only headers library
             os.cp("install/include", package:installdir())
         else
             os.cp("**.lib", package:installdir("lib"))
@@ -130,9 +130,19 @@ function install(package, configs, opt)
             os.cp("**.exp", package:installdir("lib"))
         end
     else
-        os.vrun("make -j4")
-        os.vrun("make install")
-        os.cp("install/lib", package:installdir())
+        local njob = tostring(math.ceil(os.cpuinfo().ncpu * 3 / 2))
+        argv = {"-j" .. njob}
+        if option.get("verbose") then
+            table.insert(argv, "VERBOSE=1")
+        end
+        if is_host("bsd") then
+            os.vrunv("gmake", argv)
+            os.vrunv("gmake", {"install"})
+        else
+            os.vrunv("make", argv)
+            os.vrunv("make", {"install"})
+        end
+        os.trycp("install/lib", package:installdir())
         os.cp("install/include", package:installdir())
     end
     os.cd(oldir)

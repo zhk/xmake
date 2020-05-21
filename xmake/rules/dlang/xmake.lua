@@ -20,9 +20,21 @@
 
 -- define rule: dlang.build
 rule("dlang.build")
-    set_extensions(".d")    
-    on_build_files("private.action.build.object")
+    set_sourcekinds("dc")    
+    on_build_files("private.action.build.object", {batch = true})
 
 -- define rule: dlang
 rule("dlang")
-    add_deps("dlang.build", "utils.merge.object", "utils.merge.archive")
+
+    -- add build rules
+    add_deps("dlang.build")
+
+    -- inherit links and linkdirs of all dependent targets by default
+    add_deps("utils.inherit.links")
+
+    -- support `add_files("src/*.o")` and `add_files("src/*.a")` to merge object and archive files to target
+    add_deps("utils.merge.object", "utils.merge.archive")
+
+    -- we attempt to extract symbols to the independent file and 
+    -- strip self-target binary if `set_symbols("debug")` and `set_strip("all")` are enabled
+    add_deps("utils.symbols.extract")

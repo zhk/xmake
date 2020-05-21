@@ -19,6 +19,7 @@
 --
 
 -- imports
+import("core.base.option")
 import("core.project.config")
 
 -- get configs
@@ -29,7 +30,7 @@ function _get_configs(package, configs)
     table.insert(configs, "--prefix=" .. package:installdir())
 
     -- add host for cross-complation
-    if not configs.host and not package:is_plat(os.host()) then
+    if not configs.host and not package:is_plat(os.subhost()) then
         if package:is_plat("iphoneos") then
             local triples = 
             { 
@@ -45,15 +46,18 @@ function _get_configs(package, configs)
             -- @see https://developer.android.com/ndk/guides/other_build_systems#autoconf
             local triples = 
             {
-                ["armv5te"]     = "arm-linux-androideabi",
-                ["armv7-a"]     = "arm-linux-androideabi",
+                ["armv5te"]     = "arm-linux-androideabi",  -- deprecated
+                ["armv7-a"]     = "arm-linux-androideabi",  -- deprecated
+                ["armeabi"]     = "arm-linux-androideabi",  -- removed in ndk r17
+                ["armeabi-v7a"] = "arm-linux-androideabi",
                 ["arm64-v8a"]   = "aarch64-linux-android",
-                i386            = "i686-linux-android",
+                i386            = "i686-linux-android",     -- deprecated
+                x86             = "i686-linux-android",
                 x86_64          = "x86_64-linux-android",
-                mips            = "mips-linux-android",
-                mips64          = "mips64-linux-android"
+                mips            = "mips-linux-android",     -- removed in ndk r17
+                mips64          = "mips64-linux-android"    -- removed in ndk r17
             }
-            table.insert(configs, "--host=" .. (triples[package:arch()] or triples["armv7-a"]))
+            table.insert(configs, "--host=" .. (triples[package:arch()] or triples["armeabi-v7a"]))
         elseif package:is_plat("mingw") then
             local triples = 
             { 
@@ -71,12 +75,21 @@ end
 -- get the build environments
 function buildenvs(package)
     local envs = {}
-    if package:is_plat(os.host()) then
+    if package:is_plat(os.subhost()) then
         local cflags   = table.join(table.wrap(package:config("cxflags")), package:config("cflags"))
         local cxxflags = table.join(table.wrap(package:config("cxflags")), package:config("cxxflags"))
+        local asflags  = table.copy(table.wrap(package:config("asflags")))
+        local ldflags  = table.copy(table.wrap(package:config("ldflags")))
+        if package:is_plat("linux") and package:is_arch("i386") then
+            table.insert(cflags,   "-m32")
+            table.insert(cxxflags, "-m32")
+            table.insert(asflags,  "-m32")
+            table.insert(ldflags,  "-m32")
+        end
         envs.CFLAGS    = table.concat(cflags, ' ')
         envs.CXXFLAGS  = table.concat(cxxflags, ' ')
-        envs.ASFLAGS   = table.concat(table.wrap(package:config("asflags")), ' ')
+        envs.ASFLAGS   = table.concat(asflags, ' ')
+        envs.LDFLAGS   = table.concat(ldflags, ' ')
     else
         local cflags   = table.join(table.wrap(package:build_getenv("cxflags")), package:build_getenv("cflags"))
         local cxxflags = table.join(table.wrap(package:build_getenv("cxflags")), package:build_getenv("cxxflags"))
@@ -163,6 +176,17 @@ function install(package, configs, opt)
     configure(package, configs, opt)
 
     -- do make and install
-    os.vrun("make install -j4")
+    local njob = tostring(math.ceil(os.cpuinfo().ncpu * 3 / 2))
+    local argv = {"-j" .. njob}
+    if option.get("verbose") then
+        table.insert(argv, "V=1")
+    end
+    if is_host("bsd") then
+        os.vrunv("gmake", argv)
+        os.vrun("gmake install")
+    else
+        os.vrunv("make", argv)
+        os.vrun("make install")
+    end
 end
 

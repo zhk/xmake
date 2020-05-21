@@ -23,6 +23,7 @@ import("core.base.option")
 import("core.project.project")
 import("core.language.language")
 import("private.tools.vstool")
+import("private.tools.cl.parse_include")
 
 -- init it
 function init(self)
@@ -234,6 +235,8 @@ end
 
 -- make the includedir flag
 function nf_includedir(self, dir)
+    -- @note we use os.args() to escape and wrap it, 
+    -- because all flags will be preprocessed in `builder:_preprocess_flags`/`os.argv()`
     return "-I" .. os.args(path.translate(dir))
 end
 
@@ -271,74 +274,27 @@ function nf_pcxxheader(self, pcheaderfile, target)
     end
 end
 
--- contain: "Note: including file: "?
+-- add the special flags for the given source file of target
 --
--- @note we cannot get better solution to distinguish between `includes` and `error infos`
+-- @note only it called when fileconfig is set
 --
-function _include_note(self, line)
+function add_sourceflags(self, sourcefile, fileconfig, target, targetkind)
 
-    -- init notes
+    -- add language type flags explicitly if the sourcekind is changed.
     --
-    -- TODO zh-tw, zh-hk, jp, ...
+    -- because compiler maybe compile `.c` as c++. 
+    -- e.g. 
+    --   add_files("*.c", {sourcekind = "cxx"})
     --
-    _g.notes = _g.notes or
-    {
-        "Note: including file: "
-    ,   "注意: 包含文件: "
-    }
-
-    -- contain notes?
-    for idx, note in ipairs(_g.notes) do
-
-        -- dump line bytes
-        --[[
-        print(line)
-        line:gsub(".", function (ch) print(string.byte(ch)) end)
-        --]]
-
-        if line:startswith(note) then
-            -- optimization: move this note to head
-            if idx ~= 1 then
-                table.insert(_g.notes, 1, note)
-            end
-            return line:sub(#note):trim()
-        end
+    local sourcekind = fileconfig.sourcekind
+    if sourcekind and sourcekind ~= language.sourcekind_of(sourcefile) then
+        local maps = {cc = "-TC", cxx = "-TP"}
+        return maps[sourcekind]
     end
-end
-
--- get include deps
-function _include_deps(self, outdata)
-
-    -- translate it
-    local results = {}
-    local uniques = {}
-    for _, line in ipairs(outdata:split("\n", {plain = true})) do
-
-        -- get includefile
-        local includefile = _include_note(self, line:trim())
-        if includefile then
-
-            -- get the relative
-            includefile = path.relative(includefile, project.directory())
-            includefile = path.absolute(includefile)
-
-            -- save it if belong to the project
-            if includefile:startswith(os.projectdir()) then
-
-                includefile = path.relative(includefile, project.directory())
-                -- insert it and filter repeat
-                if not uniques[includefile] then
-                    table.insert(results, includefile)
-                    uniques[includefile] = true
-                end
-            end
-        end
-    end
-    return results
 end
 
 -- make the compile arguments list for the precompiled header
-function _compargv1_pch(self, pcheaderfile, pcoutputfile, flags)
+function _compargv_pch(self, pcheaderfile, pcoutputfile, flags)
 
     -- remove "-Yuxxx.h" and "-Fpxxx.pch"
     local pchflags = {}
@@ -360,23 +316,25 @@ function _compargv1_pch(self, pcheaderfile, pcoutputfile, flags)
 end
 
 -- make the compile arguments list
-function _compargv1(self, sourcefile, objectfile, flags)
+function compargv(self, sourcefile, objectfile, flags)
 
     -- precompiled header?
     local extension = path.extension(sourcefile)
     if (extension:startswith(".h") or extension == ".inl") then
-        return _compargv1_pch(self, sourcefile, objectfile, flags)
+        return _compargv_pch(self, sourcefile, objectfile, flags)
     end
 
     -- make the compile arguments list
+    -- @note only flags in nf_xxx() need be wrapped via os.args, @see nf_includedir
     return self:program(), table.join("-c", flags, "-Fo" .. objectfile, sourcefile)
 end
 
 -- compile the source file
-function _compile1(self, sourcefile, objectfile, dependinfo, flags)
+function compile(self, sourcefile, objectfile, dependinfo, flags)
 
     -- ensure the object directory
-    local objectdir = path.directory(objectfile)
+    -- @note this path here has been normalized, we can quickly find it by the unique path separator prompt
+    local objectdir = path.directory(objectfile, path.sep())
     if not os.isdir(objectdir) then
         os.mkdir(objectdir)
     end
@@ -393,13 +351,16 @@ function _compile1(self, sourcefile, objectfile, dependinfo, flags)
             end
 
             -- use vstool to compile and enable vs_unicode_output @see https://github.com/xmake-io/xmake/issues/528
-            return vstool.iorunv(_compargv1(self, sourcefile, objectfile, compflags))
+            return vstool.iorunv(compargv(self, sourcefile, objectfile, compflags))
         end,
         catch
         {
             function (errors)
 
-                -- use cl/stdout as errors first from os.iorunv()
+                -- try removing the old object file for forcing to rebuild this source file
+                os.tryrm(objectfile)
+
+                -- use cl/stdout as errors first from vstool.iorunv()
                 if type(errors) == "table" then
                     local errs = errors.stdout or ""
                     if #errs:trim() == 0 then
@@ -408,14 +369,11 @@ function _compile1(self, sourcefile, objectfile, dependinfo, flags)
                     errors = errs
                 end
 
-                -- try removing the old object file for forcing to rebuild this source file
-                os.tryrm(objectfile)
-
                 -- filter includes notes: "Note: including file: xxx.h", @note maybe not english language
                 local results = ""
                 for _, line in ipairs(tostring(errors):split("\n", {plain = true})) do
                     line = line:rtrim()
-                    if not _include_note(self, line) then
+                    if not parse_include(line) then
                         results = results .. line .. "\r\n"
                     end
                 end
@@ -452,28 +410,7 @@ function _compile1(self, sourcefile, objectfile, dependinfo, flags)
 
     -- generate the dependent includes
     if dependinfo and outdata then
-        dependinfo.files = dependinfo.files or {}
-        table.join2(dependinfo.files, _include_deps(self, outdata))
+        dependinfo.depfiles_cl = outdata
     end
-end
-
--- make the compile arguments list
-function compargv(self, sourcefiles, objectfile, flags)
-
-    -- only support single source file now
-    assert(type(sourcefiles) ~= "table", "'object:sources' not support!")
-
-    -- for only single source file
-    return _compargv1(self, sourcefiles, objectfile, flags)
-end
-
--- compile the source file
-function compile(self, sourcefiles, objectfile, dependinfo, flags)
-
-    -- only support single source file now
-    assert(type(sourcefiles) ~= "table", "'object:sources' not support!")
-
-    -- for only single source file
-    _compile1(self, sourcefiles, objectfile, dependinfo, flags)
 end
 

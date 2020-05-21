@@ -29,7 +29,7 @@
  * includes
  */
 #include "prefix.h"
-#ifdef TB_CONFIG_OS_WINDOWS
+#if defined(TB_CONFIG_OS_WINDOWS) && !defined(TB_COMPILER_LIKE_UNIX)
 #   include <windows.h>
 #endif
 
@@ -38,7 +38,7 @@
  */
 
 // the separator
-#ifdef TB_CONFIG_OS_WINDOWS 
+#if defined(TB_CONFIG_OS_WINDOWS) && !defined(TB_COMPILER_LIKE_UNIX)
 #   define XM_OS_ENV_SEP                    ';'
 #else
 #   define XM_OS_ENV_SEP                    ':'
@@ -49,7 +49,7 @@
  */
 
 // the user environment
-#ifndef TB_CONFIG_OS_WINDOWS
+#if !defined(TB_CONFIG_OS_WINDOWS) || defined(TB_COMPILER_LIKE_UNIX)
 extern tb_char_t** environ;
 #endif
 
@@ -64,11 +64,11 @@ tb_int_t xm_os_getenvs(lua_State* lua)
     // init table
     lua_newtable(lua);
 
-#ifdef TB_CONFIG_OS_WINDOWS
+#if defined(TB_CONFIG_OS_WINDOWS) && !defined(TB_COMPILER_LIKE_UNIX)
     tb_wchar_t const* p = (tb_wchar_t const*)GetEnvironmentStringsW();
     if (p)
     {
-        tb_int_t    i = 0;
+        tb_int_t    i = 1;
         tb_char_t*  data = tb_null;
         tb_size_t   maxn = 0;
         tb_char_t   line[TB_PATH_MAXN];
@@ -113,7 +113,7 @@ tb_int_t xm_os_getenvs(lua_State* lua)
     tb_char_t const** p = (tb_char_t const**)environ;
     if (p) 
     {
-        tb_int_t  i = 0;
+        tb_int_t  i = 1;
         tb_size_t n = 0;
         while (*p) 
         {

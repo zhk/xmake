@@ -57,13 +57,13 @@ function sandbox_core_base_option.defaults()
 end
 
 -- parse arguments with the given options
-function sandbox_core_base_option.raw_parse(argv, options)
+function sandbox_core_base_option.raw_parse(argv, options, opt)
 
     -- check
     assert(argv and options)
 
     -- parse it
-    local results, errors = option.parse(argv, options)
+    local results, errors = option.parse(argv, options, opt)
     if not results then
         raise(errors)
     end
@@ -93,27 +93,17 @@ function sandbox_core_base_option.parse(argv, options, ...)
     -- parse it
     local results, errors = option.parse(argv, options)
     if not results then
-
-        -- show help
         show_help()
-
-        -- raise errors
         raise(errors)
     end
 
     -- help?
     if results.help then
-
-        -- show help
         show_help()
-
-        -- exit
-        raise()
+        os.exit()
     else
         results.help = show_help
     end
-
-    -- ok
     return results
 end
 

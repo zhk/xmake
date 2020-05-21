@@ -20,19 +20,17 @@
 
 -- imports
 import("core.base.option")
+import("core.base.colors")
 import("core.project.config")
 import("core.project.project")
 import("core.language.language")
 import("private.tools.ccache")
-import("private.tools.gcc.parse_deps")
 
 -- init it
 function init(self)
 
     -- init mxflags
-    self:set("mxflags", "-fmessage-length=0"
-                      , "-pipe"
-                      , "-fpascal-strings"
+    self:set("mxflags", "-pipe"
                       , "-DIBOutlet=__attribute__((iboutlet))"
                       , "-DIBOutletCollection(ClassName)=__attribute__((iboutletcollection(ClassName)))"
                       , "-DIBAction=void)__attribute__((ibaction)")
@@ -73,43 +71,43 @@ end
 
 -- make the strip flag
 function nf_strip(self, level)
-
-    -- the maps
     local maps = 
     {   
         debug = "-S"
     ,   all   = "-s"
     }
 
-    -- for macho target
     local plat = config.plat()
     if plat == "macosx" or plat == "iphoneos" then
         maps.all   = "-Wl,-x"
         maps.debug = "-Wl,-S"
     end
-
-    -- make it
     return maps[level]
 end
 
 -- make the symbol flag
 function nf_symbol(self, level)
-
-    -- the maps
-    local maps = 
-    {   
-        debug  = "-g"
-    ,   hidden = "-fvisibility=hidden"
-    }
-
-    -- make it
-    return maps[level] 
+    -- only for source kind
+    local kind = self:kind()
+    if language.sourcekinds()[kind] then
+        local maps = _g.symbol_maps
+        if not maps then
+            maps =
+            {   
+                debug  = "-g"
+            ,   hidden = "-fvisibility=hidden"
+            }
+            if kind == "cxx" and self:has_flags("-fvisibility-inlines-hidden", "cxflags") then
+                maps.hidden_cxx = {"-fvisibility=hidden", "-fvisibility-inlines-hidden"}
+            end
+            _g.symbol_maps = maps
+        end
+        return maps[level .. '_' .. kind] or maps[level]
+    end
 end
 
 -- make the warning flag
 function nf_warning(self, level)
-
-    -- the maps
     local maps = 
     {   
         none       = "-w"
@@ -119,15 +117,11 @@ function nf_warning(self, level)
     ,   everything = "-Wall -Wextra -Weffc++"
     ,   error      = "-Werror"
     }
-
-    -- make it
     return maps[level]
 end
 
 -- make the optimize flag
 function nf_optimize(self, level)
-
-    -- the maps
     local maps = 
     {   
         none       = "-O0"
@@ -137,15 +131,11 @@ function nf_optimize(self, level)
     ,   smallest   = "-Os"
     ,   aggressive = "-Ofast"
     }
-
-    -- make it
     return maps[level] 
 end
 
 -- make the vector extension flag
 function nf_vectorext(self, extension)
-
-    -- the maps
     local maps = 
     {   
         mmx   = "-mmmx"
@@ -157,8 +147,6 @@ function nf_vectorext(self, extension)
     ,   avx2  = "-mavx2"
     ,   neon  = "-mfpu=neon"
     }
-
-    -- make it
     return maps[extension] 
 end
 
@@ -295,18 +283,37 @@ function nf_pcxxheader(self, pcheaderfile, target)
     end
 end
 
+-- add the special flags for the given source file of target
+--
+-- @note only it called when fileconfig is set
+--
+function add_sourceflags(self, sourcefile, fileconfig, target, targetkind)
+
+    -- add language type flags explicitly if the sourcekind is changed.
+    --
+    -- because compiler maybe compile `.c` as c++. 
+    -- e.g. 
+    --   add_files("*.c", {sourcekind = "cxx"})
+    --
+    local sourcekind = fileconfig.sourcekind
+    if sourcekind and sourcekind ~= language.sourcekind_of(sourcefile) then
+        local maps = {cc = "-x c", cxx = "-x c++"}
+        return maps[sourcekind]
+    end
+end
+
 -- make the link arguments list
 function linkargv(self, objectfiles, targetkind, targetfile, flags, opt)
 
     -- add rpath for dylib (macho), e.g. -install_name @rpath/file.dylib
     local flags_extra = {}
-    if targetkind == "shared" and targetfile:endswith(".dylib") then
+    if targetkind == "shared" and is_plat("macosx", "iphoneos", "watchos") then
         table.insert(flags_extra, "-install_name")
         table.insert(flags_extra, "@rpath/" .. path.filename(targetfile))
     end
 
     -- add `-Wl,--out-implib,outputdir/libxxx.a` for xxx.dll on mingw/gcc
-    if targetkind == "shared" and config.plat() == "mingw" then
+    if targetkind == "shared" and is_plat("mingw") then
         table.insert(flags_extra, "-Wl,--out-implib," .. os.args(path.join(path.directory(targetfile), path.basename(targetfile) .. ".lib")))
     end
 
@@ -316,7 +323,7 @@ function linkargv(self, objectfiles, targetkind, targetfile, flags, opt)
     -- too long arguments for windows? 
     if is_host("windows") then
         opt = opt or {}
-        local args = os.args(argv)
+        local args = os.args(argv, {escape = true})
         if #args > 1024 and not opt.rawargs then
             local argsfile = os.tmpfile(args) .. ".args.txt" 
             io.writefile(argsfile, args)
@@ -336,9 +343,30 @@ function link(self, objectfiles, targetkind, targetfile, flags)
     os.runv(linkargv(self, objectfiles, targetkind, targetfile, flags))
 end
 
+-- has color diagnostics?
+function _has_color_diagnostics(self)
+    local colors_diagnostics = _g._HAS_COLOR_DIAGNOSTICS
+    if colors_diagnostics == nil then
+        if io.isatty() and (colors.color8() or colors.color256()) then
+            local theme = colors.theme()
+            if theme and theme:name() ~= "plain" then
+                -- for clang
+                if self:has_flags("-fcolor-diagnostics", "cxflags") then
+                    colors_diagnostics = "-fcolor-diagnostics"
+                -- for gcc
+                elseif self:has_flags("-fdiagnostics-color=always", "cxflags") then
+                    colors_diagnostics = "-fdiagnostics-color=always"
+                end
+            end
+        end
+        colors_diagnostics = colors_diagnostics or false
+        _g._HAS_COLOR_DIAGNOSTICS = colors_diagnostics
+    end
+    return colors_diagnostics
+end
 
 -- make the compile arguments list for the precompiled header
-function _compargv1_pch(self, pcheaderfile, pcoutputfile, flags)
+function _compargv_pch(self, pcheaderfile, pcoutputfile, flags)
 
     -- remove "-include xxx.h" and "-include-pch xxx.pch"
     local pchflags = {}
@@ -365,21 +393,22 @@ function _compargv1_pch(self, pcheaderfile, pcoutputfile, flags)
 end
 
 -- make the compile arguments list
-function _compargv1(self, sourcefile, objectfile, flags)
+function compargv(self, sourcefile, objectfile, flags)
 
     -- precompiled header?
     local extension = path.extension(sourcefile)
     if (extension:startswith(".h") or extension == ".inl") then
-        return _compargv1_pch(self, sourcefile, objectfile, flags)
+        return _compargv_pch(self, sourcefile, objectfile, flags)
     end
     return ccache.cmdargv(self:program(), table.join("-c", flags, "-o", objectfile, sourcefile))
 end
 
 -- compile the source file
-function _compile1(self, sourcefile, objectfile, dependinfo, flags)
+function compile(self, sourcefile, objectfile, dependinfo, flags)
 
     -- ensure the object directory
-    os.mkdir(path.directory(objectfile))
+    -- @note this path here has been normalized, we can quickly find it by the unique path separator prompt
+    os.mkdir(path.directory(objectfile, path.sep()))
 
     -- compile it
     local depfile = dependinfo and os.tmpfile() or nil
@@ -395,11 +424,17 @@ function _compile1(self, sourcefile, objectfile, dependinfo, flags)
             -- generate includes file
             local compflags = flags
             if depfile and _g._HAS_MMD_MF then
-                compflags = table.join(flags, "-MMD", "-MF", depfile)
+                compflags = table.join(compflags, "-MMD", "-MF", depfile)
+            end
+
+            -- has color diagnostics? enable it
+            local colors_diagnostics = _has_color_diagnostics(self) 
+            if colors_diagnostics then
+                compflags = table.join(compflags, colors_diagnostics)
             end
 
             -- do compile
-            return os.iorunv(_compargv1(self, sourcefile, objectfile, compflags))
+            return os.iorunv(compargv(self, sourcefile, objectfile, compflags))
         end,
         catch
         {
@@ -446,9 +481,7 @@ function _compile1(self, sourcefile, objectfile, dependinfo, flags)
                 -- generate the dependent includes
                 if depfile and os.isfile(depfile) then
                     if dependinfo then
-                        local files = dependinfo.files or {}
-                        table.join2(files, parse_deps(depfile))
-                        dependinfo.files = table.unique(files)
+                        dependinfo.depfiles_gcc = io.readfile(depfile, {continuation = "\\"})
                     end
 
                     -- remove the temporary dependent file
@@ -457,25 +490,5 @@ function _compile1(self, sourcefile, objectfile, dependinfo, flags)
             end
         }
     }
-end
-
--- make the compile arguments list
-function compargv(self, sourcefiles, objectfile, flags)
-
-    -- only support single source file now
-    assert(type(sourcefiles) ~= "table", "'object:sources' not support!")
-
-    -- for only single source file
-    return _compargv1(self, sourcefiles, objectfile, flags)
-end
-
--- compile the source file
-function compile(self, sourcefiles, objectfile, dependinfo, flags)
-
-    -- only support single source file now
-    assert(type(sourcefiles) ~= "table", "'object:sources' not support!")
-
-    -- for only single source file
-    _compile1(self, sourcefiles, objectfile, dependinfo, flags)
 end
 

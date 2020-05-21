@@ -24,46 +24,13 @@ local deprecated = deprecated or {}
 -- add deprecated entry
 function deprecated.add(newformat, oldformat, ...)
 
-    -- the entries
-    deprecated._ENTRIES = deprecated._ENTRIES or {}
-
-    -- the old and new entries
+    local utils = require("base/utils")
     local old = string.format(oldformat, ...)
     local new = newformat and string.format(newformat, ...) or false
-
-    -- add it
-    deprecated._ENTRIES[old] = new
-end
-
--- dump all deprecated entries
-function deprecated.dump()
-
-    -- lazy load modules to avoid loop
-    local utils     = require("base/utils")
-    local option    = require("base/option")
-
-    -- dump one or more ..
-    local index = 0
-    deprecated._ENTRIES = deprecated._ENTRIES or {}
-    for old, new in pairs(deprecated._ENTRIES) do
-
-        -- trace
-        if index == 0 then
-            print("")
-        end
-
-        -- show more?
-        if not option.get("verbose") and index > 0 then
-            utils.cprint("${bright color.warning}deprecated:${clear} add -v for getting more ..")
-            break
-        end
-
-        if new then
-            utils.cprint("${bright color.warning}deprecated:${clear} please uses %s instead of %s", new, old)
-        else
-            utils.cprint("${bright color.warning}deprecated:${clear} please remove %s", old)
-        end
-        index = index + 1
+    if new then
+        utils.warning("%s is deprecated, please uses %s instead of it", old, new)
+    else
+        utils.warning("%s is deprecated, please remove it", old)
     end
 end
 

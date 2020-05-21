@@ -33,6 +33,7 @@ local process   = require("base/process")
 -- save original interfaces
 os._uid         = os._uid or os.uid
 os._gid         = os._gid or os.gid
+os._exit        = os._exit or os.exit
 os._mkdir       = os._mkdir or os.mkdir
 os._rmdir       = os._rmdir or os.rmdir
 os._tmpdir      = os._tmpdir or os.tmpdir
@@ -40,40 +41,64 @@ os._setenv      = os._setenv or os.setenv
 os._getenvs     = os._getenvs or os.getenvs
 os._readlink    = os._readlink or os.readlink
 
+-- syserror code
+os.SYSERR_UNKNOWN     = -1
+os.SYSERR_NONE        = 0
+os.SYSERR_NOT_PERM    = 1
+os.SYSERR_NOT_FILEDIR = 2
+
 -- copy single file or directory
-function os._cp(src, dst)
+function os._cp(src, dst, rootdir)
 
     -- check
     assert(src and dst)
+
+    -- reserve the source directory structure if opt.rootdir is given
+    if rootdir then
+        if not path.is_absolute(src) then
+            src = path.absolute(src)
+        end
+        if not src:startswith(rootdir) then
+            return false, string.format("cannot copy file %s to %s, invalid rootdir(%s)", src, dst, rootdir)
+        end
+    end
 
     -- is file?
     if os.isfile(src) then
 
         -- the destination is directory? append the filename
         if os.isdir(dst) or path.islastsep(dst) then
-            dst = path.join(dst, path.filename(src))
+            if rootdir then
+                dst = path.join(dst, path.relative(src, rootdir))
+            else
+                dst = path.join(dst, path.filename(src))
+            end
         end
 
         -- copy file
         if not os.cpfile(src, dst) then
-            return false, string.format("cannot copy file %s to %s, error: %s", src, dst, os.strerror())
+            return false, string.format("cannot copy file %s to %s, %s", src, dst, os.strerror())
         end
     -- is directory?
     elseif os.isdir(src) then
 
         -- the destination directory exists? append the filename
         if os.isdir(dst) or path.islastsep(dst) then
-            dst = path.join(dst, path.filename(path.translate(src)))
+            if rootdir then
+                dst = path.join(dst, path.relative(src, rootdir))
+            else
+                dst = path.join(dst, path.filename(path.translate(src)))
+            end
         end
 
         -- copy directory
         if not os.cpdir(src, dst) then
-            return false, string.format("cannot copy directory %s to %s, error:  %s", src, dst, os.strerror())
+            return false, string.format("cannot copy directory %s to %s,  %s", src, dst, os.strerror())
         end
 
     -- not exists?
     else
-        return false, string.format("cannot copy file %s, error: not found this file", src)
+        return false, string.format("cannot copy file %s, not found this file", src)
     end
 
     -- ok
@@ -155,57 +180,49 @@ function os._ramdir()
     return ramdir_root or nil
 end
 
--- translate arguments for wildcard
-function os.argw(argv)
-
-    -- match all arguments
-    local results = {}
-    for _, arg in ipairs(table.wrap(argv)) do
-
-        -- exists wildcards?
-        if arg:find("([%+%-%^%$%*%[%]%%])") then
-            local pathes = os.match(arg, 'a')
-            if #pathes > 0 then
-                table.join2(results, pathes)
-            else
-                table.insert(results, arg)
-            end
-        else
-            table.insert(results, arg)
-        end
-    end
-
-    -- ok?
-    return results
+-- set on change directory callback for scheduler
+function os._sched_chdir_set(chdir)
+    os._SCHED_CHDIR = chdir
 end
 
--- make string from arguments list
-function os.args(argv)
+-- the current host is belong to the given hosts?
+function os._is_host(host, ...)
 
-    -- make it
-    local args = nil
-    for _, arg in ipairs(table.wrap(argv)) do
-        arg = arg:trim()
-        if #arg > 0 then
-            arg = arg:gsub("([\"\\])", "\\%1")
-            if arg:find("%s") then
-                if args then
-                    args = args .. " \"" .. arg .. "\""
-                else
-                    args = "\"" .. arg .. "\""
-                end
-            else
-                if args then
-                    args = args .. " " .. arg
-                else
-                    args = arg
-                end
-            end
-        end
+    -- no host
+    if not host then 
+        return false 
     end
 
-    -- ok?
-    return args or ""
+    -- exists this host? and escape '-'
+    for _, h in ipairs(table.join(...)) do
+        if h and type(h) == "string" and host:find(h:gsub("%-", "%%-")) then
+            return true
+        end
+    end
+end
+
+-- the current platform is belong to the given architectures?
+function os._is_arch(arch, ...)
+
+    -- no arch
+    if not arch then 
+        return false 
+    end
+
+    -- exists this architecture? and escape '-'
+    for _, a in ipairs(table.join(...)) do
+        if a and type(a) == "string" and arch:find("^" .. a:gsub("%-", "%%-") .. "$") then
+            return true
+        end
+    end
+end
+
+-- match wildcard files
+function os._match_wildcard_pathes(v)
+    if v:find("*", 1, true) then
+        return (os.filedirs(v))
+    end
+    return v
 end
 
 -- match files or directories
@@ -337,87 +354,91 @@ function os.filedirs(pattern, callback)
     return (os.match(pattern, 'a', callback))
 end
 
--- copy files or directories
-function os.cp(...)
+-- copy files or directories and we can reserve the source directory structure
+-- e.g. os.cp("src/**.h", "/tmp/", {rootdir = "src"})
+function os.cp(srcpath, dstpath, opt)
 
     -- check arguments
-    local args = {...}
-    if #args < 2 then
-        return false, string.format("invalid arguments: %s", table.concat(args, ' '))
+    if not srcpath or not dstpath then
+        return false, string.format("invalid arguments!")
     end
 
-    -- get source pathes
-    local srcpathes = table.slice(args, 1, #args - 1)
-
-    -- get destinate path
-    local dstpath = args[#args]
-
-    -- copy files or directories
-    for _, srcpath in ipairs(os.argw(srcpathes)) do
-        local ok, errors = os._cp(srcpath, dstpath)
-        if not ok then
-            return false, errors
+    -- reserve the source directory structure if opt.rootdir is given
+    local rootdir = opt and opt.rootdir
+    if rootdir then
+        if not path.is_absolute(rootdir) then
+            rootdir = path.absolute(rootdir)
         end
     end
 
-    -- ok
+    -- copy files or directories
+    local srcpathes = os._match_wildcard_pathes(srcpath)
+    if type(srcpathes) == "string" then
+        return os._cp(srcpathes, dstpath, rootdir)
+    else
+        for _, _srcpath in ipairs(srcpathes) do
+            local ok, errors = os._cp(_srcpath, dstpath, rootdir)
+            if not ok then
+                return false, errors
+            end
+        end
+    end
     return true
 end
 
 -- move files or directories
-function os.mv(...)
+function os.mv(srcpath, dstpath)
 
     -- check arguments
-    local args = {...}
-    if #args < 2 then
-        return false, string.format("invalid arguments: %s", table.concat(args, ' '))
+    if not srcpath or not dstpath then
+        return false, string.format("invalid arguments!")
     end
 
-    -- get source pathes
-    local srcpathes = table.slice(args, 1, #args - 1)
-
-    -- get destinate path
-    local dstpath = args[#args]
-
-    -- move files or directories
-    for _, srcpath in ipairs(os.argw(srcpathes)) do
-        local ok, errors = os._mv(srcpath, dstpath)
-        if not ok then
-            return false, errors
+    -- copy files or directories
+    local srcpathes = os._match_wildcard_pathes(srcpath)
+    if type(srcpathes) == "string" then
+        return os._mv(srcpathes, dstpath)
+    else
+        for _, _srcpath in ipairs(srcpathes) do
+            local ok, errors = os._mv(_srcpath, dstpath)
+            if not ok then
+                return false, errors
+            end
         end
     end
-
-    -- ok
     return true
 end
 
 -- remove files or directories
-function os.rm(...)
+function os.rm(filepath)
 
     -- check arguments
-    local args = {...}
-    if #args < 1 then
-        return false, string.format("invalid arguments: %s", table.concat(args, ' '))
+    if not filepath then
+        return false, string.format("invalid arguments!")
     end
 
-    -- remove directories
-    for _, filedir in ipairs(os.argw(args)) do
-        if not os._rm(filedir) then
-            return false, string.format("remove: %s failed!", filedir)
+    -- remove file or directories
+    local filepathes = os._match_wildcard_pathes(filepath)
+    if type(filepathes) == "string" then
+        return os._rm(filepathes)
+    else
+        for _, _filepath in ipairs(filepathes) do
+            local ok, errors = os._rm(_filepath)
+            if not ok then
+                return false, errors
+            end
         end
     end
-
-    -- ok
     return true
 end
 
 -- link file or directory to the new symfile
-function os.ln(filedir, symfile)
+function os.ln(srcpath, dstpath)
     if os.host() == "windows" then
         return false, string.format("symlink is not supported!")
     end
-    if not os.link(filedir, symfile) then
-        return false, string.format("link %s to %s failed!", filedir, symfile)
+    if not os.link(srcpath, dstpath) then
+        return false, string.format("cannot link %s to %s, %s", srcpath, dstpath, os.strerror())
     end
     return true
 end
@@ -459,52 +480,53 @@ function os.cd(dir)
         return nil, string.format("cannot change directory %s, not found this directory %s", dir, os.strerror())
     end
 
+    -- do chdir callback for scheduler
+    if os._SCHED_CHDIR then
+        os._SCHED_CHDIR(oldir, os.curdir())
+    end
+
     -- ok
     return oldir
 end
 
 -- create directories
-function os.mkdir(...)
+function os.mkdir(dir)
 
     -- check arguments
-    local args = {...}
-    if #args < 1 then
-        return false, string.format("invalid arguments: %s", table.concat(args, ' '))
+    if not dir then
+        return false, string.format("invalid arguments!")
     end
 
     -- create directories
-    for _, dir in ipairs(os.argw(args)) do
-        if not os._mkdir(dir) then
-            return false, string.format("create directory: %s failed!", dir)
+    local dirs = table.wrap(os._match_wildcard_pathes(dir))
+    for _, _dir in ipairs(dirs) do
+        if not os._mkdir(_dir) then
+            return false, string.format("cannot create directory: %s, %s", _dir, os.strerror())
         end
     end
-
-    -- ok
     return true
 end
 
 -- remove directories
-function os.rmdir(...)
+function os.rmdir(dir)
 
     -- check arguments
-    local args = {...}
-    if #args < 1 then
-        return false, string.format("invalid arguments: %s", table.concat(args, ' '))
+    if not dir then
+        return false, string.format("invalid arguments!")
     end
 
-    -- create directories
-    for _, dir in ipairs(os.argw(args)) do
-        if not os._rmdir(dir) then
-            return false, string.format("remove directory: %s failed!", dir)
+    -- remove directories
+    local dirs = table.wrap(os._match_wildcard_pathes(dir))
+    for _, _dir in ipairs(dirs) do
+        if not os._rmdir(_dir) then
+            return false, string.format("cannot remove directory: %s, %s", _dir, os.strerror())
         end
     end
-
-    -- ok
     return true
 end
 
 -- get the temporary directory
-function os.tmpdir()
+function os.tmpdir(opt)
 
     -- is in fakeroot? @note: uid always be 0 in root and fakeroot
     if os._FAKEROOT == nil then
@@ -517,18 +539,29 @@ function os.tmpdir()
     end
 
     -- get root tmpdir
-    if os._ROOT_TMPDIR == nil then
-        os._ROOT_TMPDIR = (os.getenv("XMAKE_TMPDIR") or os._ramdir() or os.getenv("TMPDIR") or os._tmpdir()):trim()
+    local tmpdir_root = nil
+    if opt and opt.ramdisk == false then
+        if os._ROOT_TMPDIR == nil then
+            os._ROOT_TMPDIR = (os.getenv("XMAKE_TMPDIR") or os.getenv("TMPDIR") or os._tmpdir()):trim()
+        end
+        tmpdir_root = os._ROOT_TMPDIR
+    else
+        if os._ROOT_TMPDIR_RAM == nil then
+            os._ROOT_TMPDIR_RAM = (os.getenv("XMAKE_TMPDIR") or os._ramdir() or os.getenv("TMPDIR") or os._tmpdir()):trim()
+        end
+        tmpdir_root = os._ROOT_TMPDIR_RAM
     end
-    local tmpdir_root = os._ROOT_TMPDIR
 
     -- make sub-directory name
-    local subdir = (os._FAKEROOT and ".xmakefake" or ".xmake") .. (os.uid().euid or "")
+    local subdir = os._TMPSUBDIR
+    if not subdir then
+        local name = "." .. xmake._NAME
+        subdir = path.join((os._FAKEROOT and (name .. "fake") or name) .. (os.uid().euid or ""), os.date("%y%m%d"))
+        os._TMPSUBDIR = subdir
+    end
 
     -- get a temporary directory for each user
-    local tmpdir = path.join(tmpdir_root, subdir, os.date("%y%m%d"))
-
-    -- ensure this directory exist and remove the previous directory
+    local tmpdir = path.join(tmpdir_root, subdir)
     if not os.isdir(tmpdir) then
         os.mkdir(tmpdir)
     end
@@ -536,8 +569,26 @@ function os.tmpdir()
 end
 
 -- generate the temporary file path
-function os.tmpfile(key)
-    return path.join(os.tmpdir(), "_" .. (hash.uuid4(key):gsub("-", "")))                                                        
+--
+-- e.g. 
+-- os.tmpfile("key")
+-- os.tmpfile({key = "xxx", ramdisk = false})
+--
+function os.tmpfile(opt_or_key)
+    local opt
+    local key = opt_or_key
+    if type(key) == "table" then
+        key = opt_or_key.key
+        opt = opt_or_key
+    end
+    return path.join(os.tmpdir(opt), "_" .. (hash.uuid4(key):gsub("-", "")))                                                        
+end
+
+-- exit program
+function os.exit(...)
+
+    -- do exit
+    return os._exit(...)
 end
 
 -- run command
@@ -563,17 +614,23 @@ function os.runv(program, argv, opt)
     local logfile = os.tmpfile()
 
     -- execute it
-    local ok = os.execv(program, argv, table.join(opt, {stdout = logfile, stderr = logfile}))
+    local ok, errors = os.execv(program, argv, table.join(opt, {stdout = logfile, stderr = logfile}))
     if ok ~= 0 then
 
-        -- make errors
-        local errors = io.readfile(logfile)
-        if not errors or #errors == 0 then
-            if argv ~= nil then
-                errors = string.format("runv(%s %s) failed(%d)!", program, table.concat(argv, ' '), ok)
-            else
-                errors = string.format("runv(%s) failed(%d)!", program, ok)
+        -- get command
+        local cmd = program
+        if argv then
+            cmd = cmd .. " " .. os.args(argv)
+        end
+
+        -- get subprocess errors
+        if ok ~= nil then
+            errors = io.readfile(logfile)
+            if not errors or #errors == 0 then
+                errors = string.format("runv(%s) failed(%d)", cmd, ok)
             end
+        else
+            errors = string.format("cannot runv(%s), %s", cmd, errors and errors or "unknown reason")
         end
 
         -- remove the temporary log file
@@ -591,7 +648,7 @@ function os.runv(program, argv, opt)
 end
 
 -- execute command
-function os.exec(cmd, outfile, errfile)
+function os.exec(cmd)
 
     -- parse arguments
     local argv = os.argv(cmd)
@@ -600,7 +657,7 @@ function os.exec(cmd, outfile, errfile)
     end
 
     -- run it
-    return os.execv(argv[1], table.slice(argv, 2), {stdout = outfile, stderr = errfile})
+    return os.execv(argv[1], table.slice(argv, 2))
 end
 
 -- execute command with arguments list
@@ -608,22 +665,13 @@ end
 -- @param program     "clang", "xcrun -sdk macosx clang", "~/dir/test\ xxx/clang"
 --        filename    "clang", "xcrun"", "~/dir/test\ xxx/clang"
 -- @param argv        the arguments
--- @param opt         the options, e.g. {wildcards = false, stdout = outfile, stderr = errfile,
+-- @param opt         the options, e.g. {stdout = filepath/file/pipe, stderr = filepath/file/pipe,
 --                                       envs = {PATH = "xxx;xx", CFLAGS = "xx"}}
 --
 function os.execv(program, argv, opt)
 
     -- init options
     opt = opt or {}
-
-    -- enable wildcards? default enabled
-    local wildcards = opt.wildcards
-    if wildcards == nil then
-        wildcards = true
-    end
-
-    -- translate arguments for wildcards
-    argv = wildcards and os.argw(argv) or argv
 
     -- is not executable program file?
     local filename = program
@@ -651,53 +699,24 @@ function os.execv(program, argv, opt)
     end
 
     -- init open options
-    local openopt = {envs = envs}
-    if type(opt.stdout) == "table" then
-        openopt.outfile = opt.stdout._FILE
-    else
-        openopt.outpath = opt.stdout
-    end
-    if type(opt.stderr) == "table" then
-        openopt.errfile = opt.stderr._FILE
-    else
-        openopt.errpath = opt.stderr
-    end
+    local openopt = {envs = envs, stdout = opt.stdout, stderr = opt.stderr}
 
     -- open command
     local ok = -1
-    local proc = process.openv(filename, argv, openopt)
+    local proc = process.openv(filename, argv or {}, openopt)
     if proc ~= nil then
 
         -- wait process
-        local waitok = -1
-        local status = -1
-        if coroutine.running() then
-
-            -- save the current directory
-            local curdir = os.curdir()
-
-            -- wait it
-            repeat
-                -- poll it
-                waitok, status = proc:wait(0)
-                if waitok == 0 then
-                    waitok, status = coroutine.yield(proc)
-                end
-            until waitok ~= 0
-
-            -- resume the current directory
-            os.cd(curdir)
-        else
-            waitok, status = proc:wait(-1)
-        end
-
-        -- get status
+        local waitok, status = proc:wait(-1)
         if waitok > 0 then
             ok = status
         end
 
         -- close process
         proc:close()
+    else
+        -- cannot execute process
+        return nil, os.strerror()
     end
 
     -- ok?
@@ -728,7 +747,14 @@ function os.iorunv(program, argv, opt)
     local errfile = os.tmpfile()
 
     -- run command
-    local ok = os.execv(program, argv, table.join(opt, {stdout = outfile, stderr = errfile}))
+    local ok, errors = os.execv(program, argv, table.join(opt, {stdout = outfile, stderr = errfile}))
+    if ok == nil then
+        local cmd = program
+        if argv then
+            cmd = cmd .. " " .. os.args(argv)
+        end
+        errors = string.format("cannot runv(%s), %s", cmd, errors and errors or "unknown reason")
+    end
 
     -- get output and error data
     local outdata = io.readfile(outfile)
@@ -739,7 +765,7 @@ function os.iorunv(program, argv, opt)
     os.rm(errfile)
 
     -- ok?
-    return ok == 0, outdata, errdata
+    return ok == 0, outdata, errdata, errors
 end
 
 -- raise an exception and abort the current script
@@ -803,44 +829,49 @@ function os.isexec(filepath)
     return os.isfile(filepath)
 end
 
--- get the system host
+-- get system host
 function os.host()
     return xmake._HOST
 end
 
--- get the system architecture
+-- get system architecture
 function os.arch()
     return xmake._ARCH
 end
 
--- the current host is belong to the given hosts?
-function os.is_host(...)
-
-    -- get the current host
-    local host = os.host()
-    if not host then return false end
-
-    -- exists this host? and escape '-'
-    for _, h in ipairs(table.join(...)) do
-        if h and type(h) == "string" and host:find(h:gsub("%-", "%%-")) then
-            return true
-        end
-    end
+-- get subsystem host, e.g. msys, cygwin on windows
+function os.subhost()
+    return xmake._SUBHOST
 end
 
--- the current platform is belong to the given architectures?
+-- get subsystem host architecture
+function os.subarch()
+    return xmake._SUBARCH
+end
+
+-- get features
+function os.features()
+    return xmake._FEATURES
+end
+
+-- the current host is belong to the given hosts?
+function os.is_host(...)
+    return os._is_host(os.host(), ...)
+end
+
+-- the current architecture is belong to the given architectures?
 function os.is_arch(...)
+    return os._is_arch(os.arch(), ...)
+end
 
-    -- get the host architecture
-    local arch = os.arch()
-    if not arch then return false end
+-- the current subsystem host is belong to the given hosts?
+function os.is_subhost(...)
+    return os._is_host(os.subhost(), ...)
+end
 
-    -- exists this architecture? and escape '-'
-    for _, a in ipairs(table.join(...)) do
-        if a and type(a) == "string" and arch:find("^" .. a:gsub("%-", "%%-") .. "$") then
-            return true
-        end
-    end
+-- the current subsystem architecture is belong to the given architectures?
+function os.is_subarch(...)
+    return os._is_arch(os.subarch(), ...)
 end
 
 -- get the system null device
@@ -879,41 +910,6 @@ function os.nuldev(input)
     end
 end
 
--- get user agent
-function os.user_agent()
-
-    -- init user agent
-    if os._USER_AGENT == nil then
-
-        -- init systems
-        local systems = {macosx = "Macintosh", linux = "Linux", windows = "Windows"}
-
-        -- os user agent
-        local os_user_agent = ""
-        if os.host() == "macosx" then
-            local ok, osver = os.iorun("/usr/bin/sw_vers -productVersion")
-            if ok then
-                os_user_agent = ("Intel Mac OS X " .. (osver or "")):trim()
-            end
-        elseif os.host() == "linux" then
-            local ok, osarch = os.iorun("uname -m")
-            if ok then
-                os_user_agent = (os_user_agent .. " " .. (osarch or "")):trim()
-            end
-            ok, osver = os.iorun("uname -r")
-            if ok then
-                os_user_agent = (os_user_agent .. " " .. (osver or "")):trim()
-            end
-        end
-
-        -- make user agent
-        os._USER_AGENT = string.format("Xmake/%s (%s;%s)", xmake._VERSION_SHORT, systems[os.host()] or os.host(), os_user_agent)
-    end
-
-    -- ok?
-    return os._USER_AGENT
-end
-
 -- get uid
 function os.uid(...)
     -- get uid
@@ -940,8 +936,6 @@ end
 
 -- check the current command is running as root
 function os.isroot()
-
-    -- check it
     return os.uid().euid == 0
 end
 

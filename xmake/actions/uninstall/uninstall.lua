@@ -74,6 +74,15 @@ end
 -- do uninstall target
 function _do_uninstall_target(target)
 
+    -- get install directory
+    local installdir = target:installdir()
+    if not installdir then
+        return 
+    end
+
+    -- trace
+    print("uninstalling from %s ..", installdir)
+
     -- the scripts
     local scripts =
     {
@@ -100,21 +109,15 @@ function _on_uninstall_target(target)
         return 
     end
 
-    -- get install directory
-    local installdir = target:installdir()
-    if not installdir then
-        return 
-    end
-
     -- trace
-    print("uninstalling %s from %s ...", target:name(), installdir)
+    print("uninstalling %s ..", target:name())
 
     -- build target with rules
     local done = false
     for _, r in ipairs(target:orderules()) do
         local on_uninstall = r:script("uninstall")
         if on_uninstall then
-            on_uninstall(target, {origin = _do_uninstall_target})
+            on_uninstall(target)
             done = true
         end
     end
@@ -179,7 +182,7 @@ function _uninstall_target(target)
     for i = 1, 5 do
         local script = scripts[i]
         if script ~= nil then
-            script(target, {origin = (i == 3 and _do_uninstall_target or nil)})
+            script(target)
         end
     end
 

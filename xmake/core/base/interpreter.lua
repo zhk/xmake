@@ -286,6 +286,13 @@ function interpreter:_api_register_xxx_script(scope_kind, action, ...)
         -- get arguments, pattern1, pattern2, ..., script function or name
         local args = {...}
 
+        -- get and save extra config
+        local extra_config = args[#args]
+        if table.is_dictionary(extra_config) then 
+            table.remove(args)
+            scope["__extra_" .. name] = extra_config
+        end
+
         -- get patterns
         local patterns = {}
         if #args > 1 then
@@ -344,10 +351,13 @@ function interpreter:_api_register_xxx_script(scope_kind, action, ...)
 end
 
 -- translate api pathes 
-function interpreter:_api_translate_pathes(values)
+function interpreter:_api_translate_pathes(values, apiname, infolevel)
     local results = {}
     for _, p in ipairs(values) do
-        assert(type(p) == "string", "invalid path value: " .. tostring(p))
+        if type(p) ~= "string" or #p == 0 then
+            local sourceinfo = debug.getinfo(infolevel or 3, "Sl")
+            os.raise("%s(%s): invalid path value at %s:%d", apiname, tostring(p), sourceinfo.short_src or sourceinfo.source, sourceinfo.currentline)
+        end
         if not p:find("^%s-%$%(.-%)") and not path.is_absolute(p) then
             table.insert(results, path.relative(path.absolute(p, self:scriptdir()), self:rootdir()))
         else
@@ -480,7 +490,7 @@ function interpreter:_handle(scope, remove_repeat, enable_filter)
 
         -- remove repeat first for each slice with deleted item (__del_xxx)
         if remove_repeat and not table.is_dictionary(values) then
-            values = table.unique(values, function (v) return v:startswith("__del_") end)
+            values = table.unique(values, function (v) return type(v) == "string" and v:startswith("__del_") end)
         end
 
         -- filter values
@@ -639,6 +649,7 @@ function interpreter.new()
     local instance = {  _PUBLIC = {}
                     ,   _PRIVATE = {    _SCOPES = {}
                                     ,   _MTIMES = {}
+                                    ,   _SCRIPT_FILES = {}
                                     ,   _FILTER = require("base/filter").new()}}
 
     -- inherit the interfaces of interpreter
@@ -711,6 +722,7 @@ function interpreter:load(file, opt)
 
     -- init the current file
     self._PRIVATE._CURFILE = file
+    self._PRIVATE._SCRIPT_FILES = {file}
 
     -- init the root directory
     self._PRIVATE._ROOTDIR = path.directory(file)
@@ -737,43 +749,33 @@ function interpreter:make(scope_kind, remove_repeat, enable_filter)
     return results
 end
 
+-- get all loaded script files (xmake.lua)
+function interpreter:scriptfiles()
+    assert(self and self._PRIVATE)
+    return self._PRIVATE._SCRIPT_FILES
+end
+
 -- get mtimes
 function interpreter:mtimes()
-
-    -- check
     assert(self and self._PRIVATE)
-
-    -- get mtimes
     return self._PRIVATE._MTIMES
 end
 
 -- get filter
 function interpreter:filter()
-
-    -- check
     assert(self and self._PRIVATE)
-
-    -- get it
     return self._PRIVATE._FILTER
 end
 
 -- get root directory
 function interpreter:rootdir()
-
-    -- check
     assert(self and self._PRIVATE)
-
-    -- get it
     return self._PRIVATE._ROOTDIR
 end
 
 -- set root directory
 function interpreter:rootdir_set(rootdir)
-
-    -- check
     assert(self and self._PRIVATE and rootdir)
-
-    -- set it
     self._PRIVATE._ROOTDIR = rootdir
 end
 
@@ -1116,6 +1118,9 @@ function interpreter:api_register_set_keyvalues(scope_kind, ...)
             extra_config = nil
         end
 
+        -- expand values if only one
+        values = table.unwrap(values)
+
         -- save values to "name"
         scope[name] = scope[name] or {}
         scope[name][key] = values
@@ -1160,9 +1165,12 @@ function interpreter:api_register_add_keyvalues(scope_kind, ...)
             extra_config = nil
         end
 
+        -- expand values if only one
+        values = table.unwrap(values)
+
         -- save values to "name"
         scope[name] = scope[name] or {}
-        scope[name][key] = table.join2(scope[name][key] or {}, values)
+        scope[name][key] = table.join2(table.wrap(scope[name][key]), values)
 
         -- save values to "name.key"
         local name_key = name .. "." .. key
@@ -1265,7 +1273,7 @@ function interpreter:api_register_set_pathes(scope_kind, ...)
         end
 
         -- translate pathes
-        local pathes = self:_api_translate_pathes(values)
+        local pathes = self:_api_translate_pathes(values, "set_" .. name)
 
         -- save values
         scope[name] = pathes
@@ -1298,7 +1306,7 @@ function interpreter:api_register_del_pathes(scope_kind, ...)
 
         -- translate pathes
         local values = {...}
-        local pathes = self:_api_translate_pathes(values)
+        local pathes = self:_api_translate_pathes(values, "del_" .. name)
 
         -- mark these pathes as deleted
         local pathes_deleted = {}
@@ -1336,7 +1344,7 @@ function interpreter:api_register_add_pathes(scope_kind, ...)
         end
 
         -- translate pathes
-        local pathes = self:_api_translate_pathes(values)
+        local pathes = self:_api_translate_pathes(values, "add_" .. name)
 
         -- save values
         scope[name] = table.join2(scope[name] or {}, pathes)
@@ -1545,6 +1553,7 @@ function interpreter:api_builtin_includes(...)
 
             -- update the current file
             self._PRIVATE._CURFILE = file
+            table.insert(self._PRIVATE._SCRIPT_FILES, file)
 
             -- load the file script
             local script, errors = loadfile(file)

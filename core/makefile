@@ -142,39 +142,54 @@ endif
 HOST 		:=$(if $(HOST),$(HOST),$(if ${shell uname | egrep -i linux},linux,))
 HOST 		:=$(if $(HOST),$(HOST),$(if ${shell uname | egrep -i darwin},macosx,))
 HOST 		:=$(if $(HOST),$(HOST),$(if ${shell uname | egrep -i cygwin},cygwin,))
+HOST 		:=$(if $(HOST),$(HOST),$(if ${shell uname | egrep -i msys},msys,))
 HOST 		:=$(if $(HOST),$(HOST),$(if ${shell uname | egrep -i mingw},msys,))
 HOST 		:=$(if $(HOST),$(HOST),$(if ${shell uname | egrep -i windows},msys,))
+HOST 		:=$(if $(HOST),$(HOST),$(if ${shell uname | egrep -i bsd},bsd,))
 HOST 		:=$(if $(HOST),$(HOST),linux)
 
 # platform
 PLAT 		:=$(if $(PLAT),$(PLAT),$(if ${shell uname | egrep -i linux},linux,))
 PLAT 		:=$(if $(PLAT),$(PLAT),$(if ${shell uname | egrep -i darwin},macosx,))
 PLAT 		:=$(if $(PLAT),$(PLAT),$(if ${shell uname | egrep -i cygwin},cygwin,))
-PLAT 		:=$(if $(PLAT),$(PLAT),$(if ${shell uname | egrep -i mingw},mingw,))
+PLAT 		:=$(if $(PLAT),$(PLAT),$(if ${shell uname | egrep -i msys},msys,))
+PLAT 		:=$(if $(PLAT),$(PLAT),$(if ${shell uname | egrep -i mingw},msys,))
 PLAT 		:=$(if $(PLAT),$(PLAT),$(if ${shell uname | egrep -i windows},windows,))
+PLAT 		:=$(if $(PLAT),$(PLAT),$(if ${shell uname | egrep -i bsd},bsd,))
 PLAT 		:=$(if $(PLAT),$(PLAT),linux)
 
 # architecture
 ifeq ($(ARCH),)
-
+ifneq ($(MSYSTEM_CARCH),)
+MSYSARCH 	:= $(if $(findstring mingw32,$(shell which gcc)),i386,$(MSYSTEM_CARCH))
+else
+MSYSARCH 	:= x$(shell getconf LONG_BIT)
+endif
 ARCH 		:=$(if $(findstring windows,$(PLAT)),x86,$(ARCH))
-ARCH 		:=$(if $(findstring mingw,$(PLAT)),x86,$(ARCH))
+ARCH 		:=$(if $(findstring msys,$(PLAT)),$(MSYSARCH),$(ARCH))
+ARCH 		:=$(if $(findstring cygwin,$(PLAT)),x$(shell getconf LONG_BIT),$(ARCH))
 ARCH 		:=$(if $(findstring macosx,$(PLAT)),x$(shell getconf LONG_BIT),$(ARCH))
 ARCH 		:=$(if $(findstring linux,$(PLAT)),x$(shell getconf LONG_BIT),$(ARCH))
-ARCH 		:=$(if $(findstring x32,$(ARCH)),i386,$(ARCH))
-ARCH 		:=$(if $(findstring x64,$(ARCH)),x86_64,$(ARCH))
+ARCH 		:=$(if $(findstring bsd,$(PLAT)),x$(shell getconf LONG_BIT),$(ARCH))
 ARCH 		:=$(if $(findstring iphoneos,$(PLAT)),armv7,$(ARCH))
 ARCH 		:=$(if $(findstring android,$(PLAT)),armv7,$(ARCH))
+ARCH 		:=$(if $(findstring i686,$(ARCH)),i386,$(ARCH)) # from msys/mingw32
+ARCH 		:=$(if $(findstring x32,$(ARCH)),i386,$(ARCH))
+ARCH 		:=$(if $(findstring x64,$(ARCH)),x86_64,$(ARCH))
 
 # for arm linux? 
 ifeq ($(PLAT),linux)
-ARCHSTR 	:= $(shell uname -m)
+ifneq ($(TERMUX_ARCH),)
+ARCHSTR 	:= $(TERMUX_ARCH) # on termux/ci
+else
+ARCHSTR 	:= $(shell uname -m) # on arm device, e.g. termux app
+endif
 ARCH 		:= $(if $(findstring aarch64,$(ARCHSTR)),arm64,$(ARCH))
 ARCH 		:= $(if $(findstring arm64,$(ARCHSTR)),arm64,$(ARCH))
 ARCH 		:= $(if $(findstring armv7,$(ARCHSTR)),armv7,$(ARCH))
 ARCH 		:= $(if $(findstring arm,$(ARCHSTR)),arm,$(ARCH))
+ARCH 		:= $(if $(findstring i686,$(ARCHSTR)),i386,$(ARCH)) 
 endif
-
 endif
 
 # debug
@@ -230,10 +245,16 @@ DISTCC		:=
 
 # sed
 ifeq ($(HOST),macosx)
-#SED			:= sed -i ''
 SED			:= perl -pi -e
+SEDX		:= perl -p -e
+else
+ifeq ($(HOST),bsd)
+SED			:= perl -pi -e
+SEDX		:= perl -p -e
 else
 SED			:= sed -i
+SEDX		:= sed
+endif
 endif
 
 # echo
@@ -243,18 +264,15 @@ endif
 ifeq ($(HOST),linux)
 SHELL 		= bash
 endif
+ifeq ($(HOST),bsd)
+SHELL 		= bash
+endif
 ECHO 		:= echo -e
 
 # make upper 
-ifeq ($(HOST),macosx)
 define MAKE_UPPER
-${shell echo $(1) | perl -p -e "s/(.*)/\U\1/g"}
+${shell echo $(1) | $(SEDX) "s/\(.*\)/\U\1/g"}
 endef
-else
-define MAKE_UPPER
-${shell echo $(1) | sed "s/\(.*\)/\U\1/g"}
-endef
-endif
 
 # config base
 ifeq ($(PLAT),macosx)
@@ -268,6 +286,18 @@ base_LIBNAMES 	:= ws2_32
 endif
 
 ifeq ($(PLAT),linux)
+base_LIBPATH 	:=
+base_LIBNAMES 	:= 
+base_LIBNAMES 	+= $(shell if { cat detect/curses.c | $(CC) -xc - -lcurses -ltinfo -o /dev/null 2>/dev/null; }; then echo curses tinfo; fi ) 
+base_LIBNAMES 	+= $(shell if { cat detect/readline.c | $(CC) -xc - -lreadline -o /dev/null 2>/dev/null; }; then echo readline; fi ) 
+ifneq ($(TERMUX_ARCH),) # on termux/ci?
+base_LIBNAMES 	+= m dl
+else
+base_LIBNAMES 	+= m dl pthread
+endif
+endif
+
+ifeq ($(PLAT),bsd)
 base_LIBPATH 	:=
 base_LIBNAMES 	:= 
 base_LIBNAMES 	+= $(shell if { cat detect/curses.c | $(CC) -xc - -lcurses -ltinfo -o /dev/null 2>/dev/null; }; then echo curses tinfo; fi ) 

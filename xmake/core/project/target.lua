@@ -33,6 +33,7 @@ local deprecated     = require("base/deprecated")
 local rule           = require("project/rule")
 local option         = require("project/option")
 local config         = require("project/config")
+local policy         = require("project/policy")
 local requireinfo    = require("project/requireinfo")
 local tool           = require("tool/tool")
 local linker         = require("tool/linker")
@@ -240,9 +241,14 @@ function _instance:_visibility(opt)
     return visibility
 end
 
--- invalidate the previous cache key
-function _instance:_invalidate()
+-- invalidate the previous cache 
+function _instance:_invalidate(name)
     self._CACHEID = self._CACHEID + 1
+    self._POLICIES = nil
+    -- we need flush the source files cache if target/files are modified, e.g. `target:add("files", "xxx.c")`
+    if name == "files" then
+        self._SOURCEFILES = nil
+    end
 end
 
 -- get the target info
@@ -276,7 +282,7 @@ function _instance:get(name, opt)
     end
 
     -- get the extra configuration
-    local extraconf = self._INFO:extraconf(name)
+    local extraconf = self:extraconf(name)
     if extraconf then
         -- filter values for public, private or interface if be not dictionary
         if not table.is_dictionary(values) then
@@ -301,22 +307,63 @@ function _instance:get(name, opt)
     end
 end
 
+-- get values from target dependencies
+function _instance:get_from_deps(name, opt)
+    local values = {}
+    local orderdeps = self:orderdeps()
+    local total = #orderdeps
+    for idx, _ in ipairs(orderdeps) do
+        local dep = orderdeps[total + 1 - idx]
+        local depinherit = self:extraconf("deps", dep:name(), "inherit")
+        if depinherit == nil or depinherit then
+            table.join2(values, dep:get(name, opt))
+        end
+    end
+    return values
+end
+
+-- get values from target options
+function _instance:get_from_opts(name)
+    local values = {}
+    for _, opt in ipairs(self:orderopts()) do
+        table.join2(values, table.wrap(opt:get(name)))
+    end
+    return values
+end
+
+-- get values from target packages
+function _instance:get_from_pkgs(name)
+    local values = {}
+    for _, pkg in ipairs(self:orderpkgs()) do
+        -- uses them instead of the builtin configs if exists extra package config
+        -- e.g. `add_packages("xxx", {links = "xxx"})`
+        local configinfo = self:pkgconfig(pkg:name())
+        if configinfo and configinfo[name] then
+            table.join2(values, configinfo[name])
+        else
+            -- uses the builtin package configs
+            table.join2(values, pkg:get(name))
+        end
+    end
+    return values
+end
+
 -- set the value to the target info
 function _instance:set(name, ...)
     self._INFO:apival_set(name, ...)
-    self:_invalidate()
+    self:_invalidate(name)
 end
 
 -- add the value to the target info
 function _instance:add(name, ...)
     self._INFO:apival_add(name, ...)
-    self:_invalidate()
+    self:_invalidate(name)
 end
 
 -- remove the value to the target info
 function _instance:del(name, ...)
     self._INFO:apival_del(name, ...)
-    self:_invalidate()
+    self:_invalidate(name)
 end
 
 -- get the extra configuration
@@ -326,7 +373,7 @@ end
 
 -- get user private data
 function _instance:data(name)
-    return self._DATA and self._DATA[name] or nil
+    return self._DATA and self._DATA[name]
 end
 
 -- set user private data
@@ -420,9 +467,25 @@ function _instance:version()
             end
         end
     end
-
-    -- ok?
     return version, version_build
+end
+
+-- get the target policy
+function _instance:policy(name)
+    local policies = self._POLICIES
+    if not policies then
+        policies = self:get("policy")
+        self._POLICIES = policies
+        if policies then
+            local defined_policies = policy.policies()
+            for name, _ in pairs(policies) do
+                if not defined_policies[name] then
+                    utils.warning("unknown policy(%s), please run `xmake l core.project.policy.policies` if you want to all policies", name)
+                end
+            end
+        end
+    end
+    return policy.check(name, policies and policies[name])
 end
 
 -- get the base name of target file
@@ -842,11 +905,11 @@ function _instance:installdir()
     if not installdir then
 
         -- get it from target
-        installdir = self:get("installdir")
+        installdir = baseoption.get("installdir")
         if not installdir then
 
             -- DESTDIR: be compatible with https://www.gnu.org/prep/standards/html_node/DESTDIR.html
-            installdir = baseoption.get("installdir") or os.getenv("INSTALLDIR") or os.getenv("PREFIX") or os.getenv("DESTDIR") or platform.get("installdir")
+            installdir = self:get("installdir") or os.getenv("INSTALLDIR") or os.getenv("PREFIX") or os.getenv("DESTDIR") or platform.get("installdir")
             if installdir then
                 installdir = installdir:trim()
             end
@@ -876,24 +939,28 @@ function _instance:filerules(sourcefile)
         end
     end
 
-    -- get target rule from the given source extension
-    local extension2rules = self._EXTENSION2RULES
-    if not extension2rules then
-        extension2rules = {}
+    -- load all rules for this target with sourcekinds and extensions
+    local key2rules = self._KEY2RULES
+    if not key2rules then
+        key2rules = {}
         for _, r in pairs(table.wrap(self:rules())) do
+            for _, sourcekind in ipairs(table.wrap(r:get("sourcekinds"))) do
+                key2rules[sourcekind] = key2rules[sourcekind] or {}
+                table.insert(key2rules[sourcekind], r)
+            end
             for _, extension in ipairs(table.wrap(r:get("extensions"))) do
                 extension = extension:lower()
-                extension2rules[extension] = extension2rules[extension] or {}
-                table.insert(extension2rules[extension], r)
+                key2rules[extension] = key2rules[extension] or {}
+                table.insert(key2rules[extension], r)
             end
         end
-        self._EXTENSION2RULES = extension2rules
-    end
-    for _, r in ipairs(table.wrap(extension2rules[path.extension(sourcefile):lower()])) do
-        table.insert(rules, r)
+        self._KEY2RULES = key2rules
     end
 
-    -- done
+    -- get target rules from the given sourcekind or extension 
+    for _, r in ipairs(table.wrap(key2rules[self:sourcekind_of(sourcefile)] or key2rules[path.extension(sourcefile):lower()])) do
+        table.insert(rules, r)
+    end
     return rules 
 end
 
@@ -955,8 +1022,6 @@ function _instance:sourcefiles()
 
     -- get files
     local files = self:get("files")
-
-    -- no files?
     if not files then
         return {}, false
     end
@@ -964,7 +1029,6 @@ function _instance:sourcefiles()
     -- match files
     local i = 1
     local count = 0
-    local cache = true
     local sourcefiles = {}
     for _, file in ipairs(table.wrap(files)) do
 
@@ -975,11 +1039,17 @@ function _instance:sourcefiles()
             deleted = true
         end
 
-        -- match source files
-        local results = os.match(file)
+        -- find source files 
+        local results = os.files(file)
+        if #results == 0 then
+            -- attempt to find source directories if maybe compile it as directory with the custom rules
+            if #self:filerules(file) > 0 then
+                results = os.dirs(file)
+            end
+        end
         if #results == 0 then
             local sourceinfo = (self:get("__sourceinfo_files") or {})[file] or {}
-            utils.warning("cannot match %s(%s).%s_files(\"%s\") at %s:%d", self:type(), self:name(), utils.ifelse(deleted, "del", "add"), file, sourceinfo.file or "", sourceinfo.line or -1)
+            utils.warning("cannot match %s(%s).%s_files(\"%s\") at %s:%d", self:type(), self:name(), (deleted and "del" or "add"), file, sourceinfo.file or "", sourceinfo.line or -1)
         end
 
         -- process source files
@@ -1004,18 +1074,14 @@ function _instance:sourcefiles()
     for sourcefile, _ in pairs(sourcefiles) do
         table.insert(sourcefiles_last, sourcefile)
     end
+    self._SOURCEFILES = sourcefiles_last
 
-    -- cache it
-    if cache then
-        self._SOURCEFILES = sourcefiles_last
-    end
-
-    -- ok? modified?
-    return sourcefiles_last, not cache
+    -- ok and sourcefiles are modified
+    return sourcefiles_last, true
 end
 
 -- get object file from source file
-function _instance:objectfile(sourcefile)
+function _instance:objectfile(sourcefile, sourcekind)
 
     -- get relative directory in the autogen directory
     local relativedir = nil
@@ -1065,22 +1131,29 @@ function _instance:objectfiles()
 
     -- get object files from source batches
     local objectfiles = {}
+    local batchcount = 0
     for _, sourcebatch in pairs(self:sourcebatches()) do
         table.join2(objectfiles, sourcebatch.objectfiles)
+        batchcount = batchcount + 1
     end
+
+    -- some object files may be repeat and appear link errors if multi-batches exists, so we need remove all repeat object files
+    -- e.g. add_files("src/*.c", {rules = {"rule1", "rule2"}})
+    local remove_repeat = batchcount > 1
 
     -- get object files from all dependent targets (object kind)
     if self:orderdeps() then
-        local remove_repeat = false
         for _, dep in ipairs(self:orderdeps()) do
             if dep:targetkind() == "object" then
                 table.join2(objectfiles, dep:objectfiles())
                 remove_repeat = true
             end
         end
-        if remove_repeat then
-            objectfiles = table.unique(objectfiles)
-        end
+    end
+
+    -- remove repeat object files
+    if remove_repeat then
+        objectfiles = table.unique(objectfiles)
     end
 
     -- cache it
@@ -1257,7 +1330,7 @@ function _instance:dependfile(objectfile)
 
     -- make dependent file
     -- full file name(not base) to avoid name-clash of original file
-    return path.join(self:dependir(), relativedir, path.basename(originfile) .. ".d")
+    return path.join(self:dependir(), relativedir, path.filename(originfile) .. ".d")
 end
 
 -- get the dependent include files
@@ -1284,6 +1357,19 @@ function _instance:dependfiles()
     return dependfiles
 end
 
+-- get the sourcekind for the given source file
+function _instance:sourcekind_of(sourcefile)
+
+    -- get the sourcekind of this source file
+    local sourcekind = language.sourcekind_of(sourcefile)
+    local fileconfig = self:fileconfig(sourcefile)
+    if fileconfig and fileconfig.sourcekind then
+        -- we can override the sourcekind, e.g. add_files("*.c", {sourcekind = "cxx"})
+        sourcekind = fileconfig.sourcekind
+    end
+    return sourcekind
+end
+
 -- get the kinds of sourcefiles
 --
 -- e.g. cc cxx mm mxx as ...
@@ -1300,7 +1386,7 @@ function _instance:sourcekinds()
     for _, sourcefile in pairs(self:sourcefiles()) do
 
         -- get source kind
-        local sourcekind = language.sourcekind_of(sourcefile)
+        local sourcekind = self:sourcekind_of(sourcefile)
         if sourcekind then
             table.insert(sourcekinds, sourcekind)
         end
@@ -1359,7 +1445,7 @@ function _instance:sourcebatches()
             table.insert(sourcebatch.sourcefiles, sourcefile)
 
             -- attempt to get source kind from the builtin languages
-            local sourcekind = language.sourcekind_of(sourcefile)
+            local sourcekind = self:sourcekind_of(sourcefile)
             if sourcekind then
 
                 -- save source kind
@@ -1368,7 +1454,7 @@ function _instance:sourcebatches()
                 -- insert object files to source batches
                 sourcebatch.objectfiles = sourcebatch.objectfiles or {}
                 sourcebatch.dependfiles = sourcebatch.dependfiles or {}
-                local objectfile = self:objectfile(sourcefile)
+                local objectfile = self:objectfile(sourcefile, sourcekind)
                 table.insert(sourcebatch.objectfiles, objectfile)
                 table.insert(sourcebatch.dependfiles, self:dependfile(objectfile))
             end
@@ -1402,9 +1488,9 @@ function _instance:script(name, generic)
         -- `@linux|x86_64`
         -- `@macosx,linux`
         -- `android@macosx,linux`
-        -- `android|armv7-a@macosx,linux`
-        -- `android|armv7-a@macosx,linux|x86_64`
-        -- `android|armv7-a@linux|x86_64`
+        -- `android|armeabi-v7a@macosx,linux`
+        -- `android|armeabi-v7a@macosx,linux|x86_64`
+        -- `android|armeabi-v7a@linux|x86_64`
         --
         for _pattern, _script in pairs(script) do
             local hosts = {}
@@ -1439,8 +1525,6 @@ function _instance:script(name, generic)
             end
         end
     end
-
-    -- ok
     return result
 end
 
@@ -1603,6 +1687,7 @@ function target.apis()
         ,   "target.set_configvar"
         ,   "target.set_runenv"
         ,   "target.set_toolchain"
+        ,   "target.set_policy"
             -- target.add_xxx
         ,   "target.add_values"
         ,   "target.add_runenvs"

@@ -18,11 +18,59 @@
 -- @file        depend.lua
 --
 
+-- imports
+import("private.tools.cl.parse_deps", {alias = "parse_deps_cl"})
+import("private.tools.gcc.parse_deps", {alias = "parse_deps_gcc"})
+
+-- load depfiles for gcc
+function _load_depfiles_gcc(dependinfo)
+
+    local depfiles = dependinfo.depfiles_gcc
+    if depfiles then
+        depfiles = parse_deps_gcc(depfiles)
+        if depfiles then
+            if dependinfo.files then
+                table.join2(dependinfo.files, depfiles)
+            else
+                dependinfo.files = depfiles
+            end
+        end
+        dependinfo.depfiles_gcc = nil
+    end
+end
+
+-- load depfiles for cl
+function _load_depfiles_cl(dependinfo)
+
+    local depfiles = dependinfo.depfiles_cl
+    if depfiles then
+        depfiles = parse_deps_cl(depfiles)
+        if depfiles then
+            if dependinfo.files then
+                table.join2(dependinfo.files, depfiles)
+            else
+                dependinfo.files = depfiles
+            end
+        end
+        dependinfo.depfiles_cl = nil
+    end
+end
+
 -- load dependent info from the given file (.d) 
 function load(dependfile)
+
     if os.isfile(dependfile) then
         -- may be the depend file has been incomplete when if the compilation process is abnormally interrupted
-        return try { function() return io.load(dependfile) end }
+        local dependinfo = try { function() return io.load(dependfile) end }
+        if dependinfo then
+            -- attempt to load depfiles from the compilers
+            if is_plat("windows") then
+                _load_depfiles_cl(dependinfo)
+            else
+                _load_depfiles_gcc(dependinfo)
+            end
+            return dependinfo
+        end
     end
 end
 
@@ -47,30 +95,17 @@ function is_changed(dependinfo, opt)
     end
 
     -- check the dependent files are changed?
-    local lastmtime = nil
-    _g.file_results = _g.file_results or {}
+    local lastmtime = opt.lastmtime or 0
+    _g.files_mtime = _g.files_mtime or {}
+    local files_mtime = _g.files_mtime
     for _, file in ipairs(files) do
 
-        -- optimization: this file has been not checked?
-        local status = _g.file_results[file]
-        if status == nil then
+        -- get and cache the file mtime
+        local mtime = files_mtime[file] or os.mtime(file)
+        files_mtime[file] = mtime
 
-            -- optimization: only uses the mtime of first object file
-            lastmtime = lastmtime or opt.lastmtime or 0
-
-            -- source and header files have been changed?
-            if not os.isfile(file) or os.mtime(file) > lastmtime then
-
-                -- mark this file as changed
-                _g.file_results[file] = true
-                return true
-            end
-
-            -- mark this file as not changed
-            _g.file_results[file] = false
-        
-        -- has been checked and changed?
-        elseif status then
+        -- source and header files have been changed or not exists?
+        if mtime == 0 or mtime > lastmtime then
             return true
         end
     end

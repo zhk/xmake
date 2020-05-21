@@ -26,6 +26,7 @@ import("impl.utils.filter")
 import("impl.package")
 import("impl.repository")
 import("impl.environment")
+import("impl.utils.get_requires")
 
 -- from xmake/system/remote?
 function _from(instance)
@@ -39,7 +40,9 @@ function _from(instance)
             return ""
         end
     elseif #instance:urls() > 0 then
-        return instance:supported() and format(", ${yellow}remote${clear}(in %s)", instance:repo():name()) or format(", ${yellow}remote${clear}(${red}unsupported${clear} in %s)", instance:repo():name())
+        local repo = instance:repo()
+        local reponame = repo and repo:name() or "unknown"
+        return instance:supported() and format(", ${yellow}remote${clear}(in %s)", reponame) or format(", ${yellow}remote${clear}(${red}unsupported${clear} in %s)", reponame)
     elseif instance:isSys() then
         return ", ${red}missing${clear}"
     else
@@ -56,10 +59,12 @@ function _info(instance)
 end
 
 -- show the given package info
-function main(package_names)
+function main(requires_raw)
 
-    -- no package names?
-    if not package_names then
+    -- get requires and extra config
+    local requires_extra = nil
+    local requires, requires_extra = get_requires(requires_raw)
+    if not requires or #requires == 0 then
         return 
     end
 
@@ -73,25 +78,6 @@ function main(package_names)
 
     -- show title
     print("The package info of project:")
-
-    -- get project requires 
-    local project_requires, requires_extra = project.requires_str()
-    if not project_requires then
-        raise("requires(%s) not found in project!", table.concat(requires, " "))
-    end
-
-    -- find required package in project
-    local requires = {}
-    for _, name in ipairs(package_names) do
-        for _, require_str in ipairs(project_requires) do
-            if require_str:split(' ')[1]:lower():find(name:lower()) then
-                table.insert(requires, require_str)
-            end
-        end
-    end
-    if #requires == 0 then
-        raise("%s not found in project!", table.concat(package_names, " "))
-    end
 
     -- list all packages
     for _, instance in ipairs(package.load_packages(requires, {requires_extra = requires_extra})) do
@@ -120,7 +106,7 @@ function main(package_names)
                 print("         -> %s", filter.handle(url, instance))
                 local sourcehash = instance:sourcehash(instance:url_alias(url))
                 if sourcehash then
-                    cprint("            -> ${yellow}%s${clear}", sourcehash)
+                    cprint("            -> ${yellow}%s", sourcehash)
                 end
             end
         end

@@ -21,18 +21,13 @@
 -- imports
 import("core.base.task")
 import("core.base.option")
-import("core.project.project")
 import("impl.package")
 import("impl.repository")
 import("impl.environment")
+import("impl.utils.get_requires")
 
 -- uninstall the given packages
-function main(package_names)
-
-    -- no package name?
-    if not package_names then
-        return 
-    end
+function main(requires_raw)
 
     -- enter environment 
     environment.enter()
@@ -42,29 +37,20 @@ function main(package_names)
         task.run("repo", {update = true})
     end
 
-    -- get project requires 
-    local project_requires, requires_extra = project.requires_str()
-    if not project_requires then
-        raise("requires(%s) not found in project!", table.concat(requires, " "))
-    end
-
-    -- find required package in project
-    local requires = {}
-    for _, name in ipairs(package_names) do
-        for _, require_str in ipairs(project_requires) do
-            if require_str:split(' ')[1]:lower() == name:lower() then
-                table.insert(requires, require_str)
-            end
-        end
-    end
-    if #requires == 0 then
-        raise("%s not found in project!", table.concat(package_names, " "))
+    -- get requires and extra config
+    local requires_extra = nil
+    local requires, requires_extra = get_requires(requires_raw)
+    if not requires or #requires == 0 then
+        return 
     end
 
     -- uninstall packages
     local packages = package.uninstall_packages(requires, {requires_extra = requires_extra})
     for _, instance in ipairs(packages) do
         print("uninstall: %s%s ok!", instance:name(), instance:version_str() and ("-" .. instance:version_str()) or "")
+    end
+    if not packages or #packages == 0 then
+        print("local packages not found!")
     end
 
     -- leave environment

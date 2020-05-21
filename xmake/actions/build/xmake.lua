@@ -35,27 +35,31 @@ task("build")
                 -- description
             ,   description = "Build targets if no given tasks."
 
+                -- xmake b
+            ,   shortname = 'b'
+
                 -- options
             ,   options = 
                 {
-                    {'b', "build",      "k",  nil,          "Build target. This is default building mode and optional."     }
-                ,   {'r', "rebuild",    "k",  nil,          "Rebuild the target."                                           }
-                ,   {'a', "all",        "k",  nil,          "Build all targets."                                            }
+                    {'b', "build",      "k",  nil   , "Build target. This is default building mode and optional."     }
+                ,   {'r', "rebuild",    "k",  nil   , "Rebuild the target."                                           }
+                ,   {'a', "all",        "k",  nil   , "Build all targets."                                            }
+                ,   {nil, "dry-run",    "k",  nil   , "Dry run to build target."                                      }
 
                 ,   {}
-                ,   {'j', "jobs",       "kv", tostring(math.ceil(os.cpuinfo().ncpu * 3 / 2)), 
-                                                            "Specifies the number of jobs to build simultaneously."         }
-                ,   {'w', "warning",    "k",  false,        "Enable the warnings output."                                   }
-                ,   {'t', "try",        "k",  false,        "Try building project using third-party buildsystem."           }
-                ,   {nil, "files",      "kv", nil,          "Build the given source files.",
-                                                            "e.g. ",
-                                                            "    - xmake --files=src/main.c", 
-                                                            "    - xmake --files='src/*.c' [target]",
-                                                            "    - xmake --files='src/**c|excluded_file.c'",
-                                                            "    - xmake --files='src/main.c" .. path.envsep() .. "src/test.c'"  }
+                ,   {'j', "jobs",       "kv", tostring(math.ceil(os.cpuinfo().ncpu * 3 / 2)),
+                                                      "Specifies the number of jobs to build simultaneously."         }
+                ,   {'w', "warning",    "k",  false , "Enable the warnings output."                                   }
+                ,   {nil, "files",      "kv", nil   , "Build the given source files.",
+                                                      "e.g. ",
+                                                      "    - xmake --files=src/main.c",
+                                                      "    - xmake --files='src/*.c' [target]",
+                                                      "    - xmake --files='src/**c|excluded_file.c'",
+                                                      "    - xmake --files='src/main.c" .. path.envsep() .. "src/test.c'"  }
                
                 ,   {}
-                ,   {nil, "target",     "v",  nil,          "Build the given target."                                       } 
+                ,   {nil, "target",     "v",  nil   , "The target name. It will build all default targets if this parameter is not specified."
+                                                    , values = function () return try{ function () return table.keys(import("core.project.project").targets()) end } end }
                 }
             }
 

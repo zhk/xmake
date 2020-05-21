@@ -36,22 +36,79 @@ function _check_arch()
     end
 end
 
--- get toolchains
-function _toolchains()
-
+-- check the cross toolchain
+function _check_cross_toolchain()
     -- find cross toolchain
-    local cross = ""
     local cross_toolchain = find_cross_toolchain(config.get("sdk") or config.get("bin"), {bindir = config.get("bin"), cross = config.get("cross")})
     if cross_toolchain then
         config.set("cross", cross_toolchain.cross, {readonly = true, force = true})
         config.set("bin", cross_toolchain.bindir, {readonly = true, force = true})
-        cross = cross_toolchain.cross
 
         -- TODO add to environment module
         -- add bin search library for loading some dependent .dll files windows 
         if cross_toolchain.bindir and is_host("windows") then
             os.addenv("PATH", cross_toolchain.bindir)
         end
+    end
+end
+
+-- get llvm toolchains
+function _toolchains_llvm()
+
+    -- init toolchains
+    local cc         = toolchain("the c compiler")
+    local cxx        = toolchain("the c++ compiler")
+    local cpp        = toolchain("the c preprocessor")
+    local ld         = toolchain("the linker")
+    local sh         = toolchain("the shared library linker")
+    local ar         = toolchain("the static library archiver")
+    local ex         = toolchain("the static library extractor")
+    local strip      = toolchain("the symbols stripper")
+    local ranlib     = toolchain("the static library index generator")
+    local as         = toolchain("the assember")
+    local toolchains = {cc = cc, cxx = cxx, cpp = cpp, as = as, ld = ld, sh = sh, ar = ar, ex = ex, ranlib = ranlib, strip = strip}
+
+    -- init the c compiler
+    cc:add("$(env CC)", "clang")
+
+    -- init the c preprocessor
+    cpp:add("$(env CPP)", "clang -E")
+
+    -- init the c++ compiler
+    cxx:add("$(env CXX)", "clang", "clang++")
+
+    -- init the assember
+    as:add("$(env AS)", "clang")
+
+    -- init the linker
+    ld:add("$(env LD)", "$(env CXX)", "clang++", "clang")
+
+    -- init the shared library linker
+    sh:add("$(env SH)", "$(env CXX)", "clang++", "clang")
+
+    -- init the static library archiver
+    ar:add("$(env AR)", "llvm-ar")
+
+    -- init the static library extractor
+    ex:add("$(env AR)", "llvm-ar")
+
+    -- init the static library index generator
+    ranlib:add("$(env RANLIB)", "llvm-ranlib")
+
+    -- init the symbols stripper
+    strip:add("$(env STRIP)", "llvm-strip")
+    return toolchains
+end
+
+-- get toolchains
+function _toolchains()
+
+    -- get cross prefix
+    local cross = config.get("cross") or ""
+
+    -- for llvm toolchains?
+    if cross == "" and config.get("toolchain") == "llvm" then
+        return _toolchains_llvm()
     end
 
     -- init toolchains
@@ -62,9 +119,10 @@ function _toolchains()
     local sh         = toolchain("the shared library linker")
     local ar         = toolchain("the static library archiver")
     local ex         = toolchain("the static library extractor")
+    local strip      = toolchain("the symbols stripper")
     local ranlib     = toolchain("the static library index generator")
     local as         = toolchain("the assember")
-    local toolchains = {cc = cc, cxx = cxx, cpp = cpp, as = as, ld = ld, sh = sh, ar = ar, ex = ex, ranlib = ranlib}
+    local toolchains = {cc = cc, cxx = cxx, cpp = cpp, as = as, ld = ld, sh = sh, ar = ar, ex = ex, ranlib = ranlib, strip = strip}
 
     -- init the c compiler
     cc:add("$(env CC)", {name = "gcc", cross = cross}, {name = "clang", cross = cross})
@@ -103,7 +161,10 @@ function _toolchains()
     ex:add("$(env AR)", {name = "ar", cross = cross})
 
     -- init the static library index generator
-    ar:add("$(env RANLIB)", {name = "ranlib", cross = cross})
+    ranlib:add("$(env RANLIB)", {name = "ranlib", cross = cross})
+
+    -- init the symbols stripper
+    strip:add("$(env STRIP)", {name = "strip", cross = cross})
     return toolchains
 end
 
@@ -120,6 +181,9 @@ function main(platform, name)
 
         -- check arch
         _check_arch()
+
+        -- check cross toolchain
+        _check_cross_toolchain()
     end
 end
 

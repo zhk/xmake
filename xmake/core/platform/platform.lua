@@ -23,14 +23,15 @@ local platform      = platform or {}
 local _instance     = _instance or {}
 
 -- load modules
-local os            = require("base/os")
-local path          = require("base/path")
-local utils         = require("base/utils")
-local table         = require("base/table")
-local interpreter   = require("base/interpreter")
-local sandbox       = require("sandbox/sandbox")
-local config        = require("project/config")
-local global        = require("base/global")
+local os             = require("base/os")
+local path           = require("base/path")
+local utils          = require("base/utils")
+local table          = require("base/table")
+local interpreter    = require("base/interpreter")
+local sandbox        = require("sandbox/sandbox")
+local config         = require("project/config")
+local global         = require("base/global")
+local sandbox_module = require("sandbox/modules/import/core/sandbox/module")
 
 -- new an instance
 function _instance.new(name, info, rootdir)
@@ -340,8 +341,6 @@ function platform.tool(toolkind, plat)
             program = program:sub(pos + 1)
         end
     end
-
-    -- ok
     return program, toolname
 end
 

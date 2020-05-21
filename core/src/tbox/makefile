@@ -232,6 +232,7 @@ tbox_C_FILES 			+= \
 						tbox/src/tbox/platform/cpu \
 						tbox/src/tbox/platform/sched \
 						tbox/src/tbox/platform/semaphore \
+						tbox/src/tbox/platform/pipe \
 						tbox/src/tbox/platform/socket \
 						tbox/src/tbox/platform/syserror \
 						tbox/src/tbox/platform/thread \
@@ -239,7 +240,7 @@ tbox_C_FILES 			+= \
 						tbox/src/tbox/platform/time \
 						tbox/src/tbox/platform/timer \
 						tbox/src/tbox/platform/impl/charset \
-						tbox/src/tbox/platform/impl/sockdata \
+						tbox/src/tbox/platform/impl/pollerdata \
 						tbox/src/tbox/platform/impl/dns \
 						tbox/src/tbox/platform/impl/platform \
 						tbox/src/tbox/libm/isfin \
@@ -263,6 +264,31 @@ tbox_C_FILES 			+= \
 						tbox/src/tbox/charset/ucs2 \
 						tbox/src/tbox/charset/ucs4 \
 						tbox/src/tbox/charset/iso8859 
+
+iswin =
+ifeq ($(PLAT),windows)
+	iswin = yes
+endif
+ifeq ($(PLAT),msys)
+	iswin = yes
+endif
+ifeq ($(PLAT),cygwin)
+	iswin = yes
+endif
+
+ifdef iswin
+tbox_C_FILES 			+= \
+						tbox/src/tbox/platform/windows/windows \
+						tbox/src/tbox/platform/windows/iocp_object \
+						tbox/src/tbox/platform/windows/socket_pool \
+						tbox/src/tbox/platform/windows/interface/ws2_32 \
+						tbox/src/tbox/platform/windows/interface/shell32 \
+						tbox/src/tbox/platform/windows/interface/dbghelp \
+						tbox/src/tbox/platform/windows/interface/mswsock \
+						tbox/src/tbox/platform/windows/interface/kernel32 \
+						tbox/src/tbox/platform/windows/interface/iphlpapi \
+						tbox/src/tbox/platform/windows/interface/interface 
+endif
 
 # includes
 tbox_INC_DIRS 			+= \

@@ -36,6 +36,7 @@ local rule                  = require("project/rule")
 local target                = require("project/target")
 local config                = require("project/config")
 local option                = require("project/option")
+local policy                = require("project/policy")
 local requireinfo           = require("project/requireinfo")
 local deprecated_project    = require("project/deprecated/project")
 local package               = require("package/package")
@@ -95,6 +96,11 @@ function project._api_is_host(interp, ...)
     return os.is_host(...)
 end
 
+-- the current subsystem host is belong to the given hosts?
+function project._api_is_subhost(interp, ...)
+    return os.is_subhost(...)
+end
+
 -- the current config is belong to the given config values?
 function project._api_is_config(interp, name, ...)
     return config.is_value(name, ...)
@@ -148,185 +154,6 @@ function project._api_add_platformdirs(interp, ...)
     platform.add_directories(...)
 end
 
--- get interpreter
-function project.interpreter()
-
-    -- the interpreter has been initialized? return it directly
-    if project._INTERPRETER then
-        return project._INTERPRETER
-    end
-
-    -- init interpreter
-    local interp = interpreter.new()
-    assert(interp)
-
-    -- set root directory
-    interp:rootdir_set(project.directory())
-
-    -- set root scope
-    interp:rootscope_set("target")
-
-    -- define apis for rule
-    interp:api_define(rule.apis())
-
-    -- define apis for task
-    interp:api_define(task.apis())
-
-    -- define apis for target
-    interp:api_define(target.apis())
-
-    -- define apis for option
-    interp:api_define(option.apis())
-
-    -- define apis for package
-    interp:api_define(package.apis())
-
-    -- define apis for language
-    interp:api_define(language.apis())
-
-    -- define apis for project
-    interp:api_define
-    {
-        values =
-        {
-            -- set_xxx
-            "set_project"
-        ,   "set_modes"     -- TODO deprecated
-        ,   "set_description"
-            -- add_xxx
-        ,   "add_requires"
-        ,   "add_repositories"
-        }
-    ,   pathes = 
-        {
-            -- add_xxx
-            "add_packagedirs"
-        }
-    ,   keyvalues =
-        {
-            "set_config"
-        }
-    ,   custom = 
-        {
-            -- is_xxx
-            {"is_os",                   project._api_is_os            }
-        ,   {"is_kind",                 project._api_is_kind          }
-        ,   {"is_host",                 project._api_is_host          }
-        ,   {"is_mode",                 project._api_is_mode          }
-        ,   {"is_plat",                 project._api_is_plat          }
-        ,   {"is_arch",                 project._api_is_arch          }
-        ,   {"is_config",               project._api_is_config        }
-            -- get_xxx
-        ,   {"get_config",              project._api_get_config       }
-            -- has_xxx
-        ,   {"has_config",              project._api_has_config       }
-        ,   {"has_package",             project._api_has_package      }
-            -- add_xxx
-        ,   {"add_moduledirs",          project._api_add_moduledirs   }
-        ,   {"add_plugindirs",          project._api_add_plugindirs   }
-        ,   {"add_platformdirs",        project._api_add_platformdirs }
-        }
-    }
-
-    -- register api: deprecated
-    deprecated_project.api_register(interp)
-
-    -- set filter
-    interp:filter():register("project", function (variable)
-
-        -- check
-        assert(variable)
-
-        -- hack buildir first
-        if variable == "buildir" then
-            return config.buildir()
-        end
-
-        -- attempt to get it directly from the configure
-        local result = config.get(variable)
-        if not result or type(result) ~= "string" then 
-
-            -- init maps
-            local maps = 
-            {
-                os          = platform.os()
-            ,   host        = os.host()
-            ,   prefix      = "$(prefix)"
-            ,   tmpdir      = function () return os.tmpdir() end
-            ,   curdir      = function () return os.curdir() end
-            ,   scriptdir   = function () return sandbox_os.scriptdir() end
-            ,   globaldir   = global.directory()
-            ,   configdir   = config.directory()
-            ,   projectdir  = project.directory()
-            ,   programdir  = os.programdir()
-            }
-
-            -- map it
-            result = maps[variable]
-            if type(result) == "function" then
-                result = result()
-            end
-
-            -- attempt to get it from the platform tools, e.g. cc, cxx, ld ..
-            -- because these values may not exist in config cache when call `config.get()`, we need check and get it.
-            --
-            if not result then
-                result = platform.tool(variable)
-            end
-        end
-
-        -- ok?
-        return result
-    end)
-
-    -- save interpreter
-    project._INTERPRETER = interp
-
-    -- ok?
-    return interp
-end
-
--- get the project file
-function project.file()
-    return os.projectfile()
-end
-
--- get the global rcfile: ~/.xmakerc.lua
-function project.rcfile()
-    local xmakerc = project._XMAKE_RCFILE
-    if xmakerc == nil then
-        xmakerc = "/etc/xmakerc.lua"
-        if not os.isfile(xmakerc) then
-            xmakerc = "~/.xmakerc.lua"
-            if not os.isfile(xmakerc) then
-                xmakerc = path.join(global.directory(), "xmakerc.lua")
-            end
-        end
-        project._XMAKE_RCFILE = xmakerc
-    end
-    return xmakerc
-end
-
--- get the project directory
-function project.directory()
-    return os.projectdir()
-end
-
--- get the filelock of the whole project directory
-function project.filelock()
-    local filelock = project._FILELOCK
-    if filelock == nil then
-        filelock = io.openlock(path.join(config.directory(), "project.lock"))
-        project._FILELOCK = filelock 
-    end
-    return filelock
-end
-
--- get the project info from the given name
-function project.get(name)
-    return project._INFO and project._INFO:get(name) or nil
-end
-
 -- load the project file
 function project._load(force, disable_filter)
 
@@ -345,7 +172,7 @@ function project._load(force, disable_filter)
     local interp = project.interpreter()
 
     -- load script
-    local ok, errors = interp:load(project.file(), {on_load_data = function (data) 
+    local ok, errors = interp:load(project.rootfile(), {on_load_data = function (data) 
             local xmakerc_file = project.rcfile()
             if xmakerc_file and os.isfile(xmakerc_file) then
                 local rcdata = io.readfile(xmakerc_file)
@@ -439,7 +266,7 @@ end
 function project._load_tasks()
  
     -- the project file is not found?
-    if not os.isfile(project.file()) then
+    if not os.isfile(project.rootfile()) then
         return {}, nil
     end
 
@@ -613,7 +440,7 @@ end
 function project._load_options(disable_filter)
 
     -- the project file is not found?
-    if not os.isfile(project.file()) then
+    if not os.isfile(project.rootfile()) then
         return {}, nil
     end
 
@@ -769,6 +596,237 @@ function project._load_packages()
     return project._load_scope("package", true, false)
 end
 
+-- get project apis
+function project.apis()
+
+    return
+    {
+        values =
+        {
+            -- set_xxx
+            "set_project"
+        ,   "set_modes"     -- TODO deprecated
+        ,   "set_description"
+            -- add_xxx
+        ,   "add_requires"
+        ,   "add_repositories"
+        }
+    ,   pathes = 
+        {
+            -- add_xxx
+            "add_packagedirs"
+        }
+    ,   keyvalues =
+        {
+            "set_config"
+        }
+    ,   custom = 
+        {
+            -- is_xxx
+            {"is_os",                   project._api_is_os            }
+        ,   {"is_kind",                 project._api_is_kind          }
+        ,   {"is_arch",                 project._api_is_arch          }
+        ,   {"is_host",                 project._api_is_host          }
+        ,   {"is_subhost",              project._api_is_subhost       }
+        ,   {"is_mode",                 project._api_is_mode          }
+        ,   {"is_plat",                 project._api_is_plat          }
+        ,   {"is_config",               project._api_is_config        }
+            -- get_xxx
+        ,   {"get_config",              project._api_get_config       }
+            -- has_xxx
+        ,   {"has_config",              project._api_has_config       }
+        ,   {"has_package",             project._api_has_package      }
+            -- add_xxx
+        ,   {"add_moduledirs",          project._api_add_moduledirs   }
+        ,   {"add_plugindirs",          project._api_add_plugindirs   }
+        ,   {"add_platformdirs",        project._api_add_platformdirs }
+        }
+    }
+end
+
+-- get interpreter
+function project.interpreter()
+
+    -- the interpreter has been initialized? return it directly
+    if project._INTERPRETER then
+        return project._INTERPRETER
+    end
+
+    -- init interpreter
+    local interp = interpreter.new()
+    assert(interp)
+
+    -- set root directory
+    interp:rootdir_set(project.directory())
+
+    -- set root scope
+    interp:rootscope_set("target")
+
+    -- define apis for rule
+    interp:api_define(rule.apis())
+
+    -- define apis for task
+    interp:api_define(task.apis())
+
+    -- define apis for target
+    interp:api_define(target.apis())
+
+    -- define apis for option
+    interp:api_define(option.apis())
+
+    -- define apis for package
+    interp:api_define(package.apis())
+
+    -- define apis for language
+    interp:api_define(language.apis())
+
+    -- define apis for project
+    interp:api_define(project.apis())
+
+    -- register api: deprecated
+    deprecated_project.api_register(interp)
+
+    -- set filter
+    interp:filter():register("project", function (variable)
+
+        -- check
+        assert(variable)
+
+        -- hack buildir first
+        if variable == "buildir" then
+            return config.buildir()
+        end
+
+        -- attempt to get it directly from the configure
+        local result = config.get(variable)
+        if not result or type(result) ~= "string" then 
+
+            -- init maps
+            local maps = 
+            {
+                os          = platform.os()
+            ,   host        = os.host()
+            ,   subhost     = os.subhost()
+            ,   prefix      = "$(prefix)"
+            ,   tmpdir      = function () return os.tmpdir() end
+            ,   curdir      = function () return os.curdir() end
+            ,   scriptdir   = function () return sandbox_os.scriptdir() end
+            ,   globaldir   = global.directory()
+            ,   configdir   = config.directory()
+            ,   projectdir  = project.directory()
+            ,   programdir  = os.programdir()
+            }
+
+            -- map it
+            result = maps[variable]
+            if type(result) == "function" then
+                result = result()
+            end
+
+            -- attempt to get it from the platform tools, e.g. cc, cxx, ld ..
+            -- because these values may not exist in config cache when call `config.get()`, we need check and get it.
+            --
+            if not result then
+                result = platform.tool(variable)
+            end
+        end
+
+        -- ok?
+        return result
+    end)
+
+    -- save interpreter
+    project._INTERPRETER = interp
+
+    -- ok?
+    return interp
+end
+
+-- get the root project file
+function project.rootfile()
+    return os.projectfile()
+end
+
+-- get all loaded project files with subfiles (xmake.lua)
+function project.allfiles()
+    local rcfile = project.rcfile()
+    if rcfile and os.isfile(rcfile) then
+        return table.join(project.interpreter():scriptfiles(), rcfile)
+    else
+        return project.interpreter():scriptfiles()
+    end
+end
+
+-- get the global rcfile: ~/.xmakerc.lua
+function project.rcfile()
+    local xmakerc = project._XMAKE_RCFILE
+    if xmakerc == nil then
+        xmakerc = "/etc/xmakerc.lua"
+        if not os.isfile(xmakerc) then
+            xmakerc = "~/.xmakerc.lua"
+            if not os.isfile(xmakerc) then
+                xmakerc = path.join(global.directory(), "xmakerc.lua")
+            end
+        end
+        project._XMAKE_RCFILE = xmakerc
+    end
+    return xmakerc
+end
+
+-- get the project directory
+function project.directory()
+    return os.projectdir()
+end
+
+-- get the filelock of the whole project directory
+function project.filelock()
+    local filelock = project._FILELOCK
+    if filelock == nil then
+        filelock = io.openlock(path.join(config.directory(), "project.lock"))
+        project._FILELOCK = filelock 
+    end
+    return filelock
+end
+
+-- get the project info from the given name
+function project.get(name)
+    return project._INFO and project._INFO:get(name) or nil
+end
+
+-- get the project name
+function project.name()
+    local name = project.get("project")
+    -- TODO multi project names? we only get the first name now.
+    -- and we need improve it in the future.
+    if type(name) == "table" then
+        name = name[1]
+    end
+    return name
+end
+
+-- get the project version, the root version of the target scope
+function project.version()
+    return project.get("target.version")
+end
+
+-- get the project policy, the root policy of the target scope
+function project.policy(name)
+    local policies = project._POLICIES
+    if not policies then
+        policies = project.get("target.policy")
+        project._POLICIES = policies
+        if policies then
+            local defined_policies = policy.policies()
+            for name, _ in pairs(policies) do
+                if not defined_policies[name] then
+                    utils.warning("unknown policy(%s), please run `xmake l core.project.policy.policies` if you want to all policies", name)
+                end
+            end
+        end
+    end
+    return policy.check(name, policies and policies[name])
+end
+
 -- clear project cache to reload targets and options
 function project.clear()
 
@@ -919,13 +977,27 @@ function project.mtimes()
     return project.interpreter():mtimes()
 end
 
+-- get the project modes
+function project.modes()
+    local modes = project.get("modes") or {}
+    for _, target in pairs(table.wrap(project.targets())) do
+        for _, rule in ipairs(target:orderules()) do
+            local name = rule:name()
+            if name:startswith("mode.") then
+                table.insert(modes, name:sub(6))
+            end
+        end
+    end
+    return table.unique(modes)
+end
+
 -- get the project menu
 function project.menu()
 
     -- attempt to load options from the project file
     local options = nil
     local errors = nil
-    if os.isfile(project.file()) then
+    if os.isfile(project.rootfile()) then
         options, errors = project._load_options(true)
     end
 

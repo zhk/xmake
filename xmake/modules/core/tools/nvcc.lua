@@ -25,7 +25,6 @@ import("core.project.project")
 import("core.platform.platform")
 import("core.language.language")
 import("private.tools.ccache")
-import("private.tools.nvcc.parse_deps")
 
 -- init it
 function init(self)
@@ -339,9 +338,8 @@ function _compile1(self, sourcefile, objectfile, dependinfo, flags)
                 -- generate the dependent includes
                 if depfile and os.isfile(depfile) then
                     if dependinfo and self:kind() ~= "as" then
-                        local files = dependinfo.files or {}
-                        table.join2(files, parse_deps(depfile))
-                        dependinfo.files = table.unique(files)
+                        -- nvcc uses gcc-style depfiles
+                        dependinfo.depfiles_gcc = io.readfile(depfile, {continuation = "\\"})
                     end
 
                     -- remove the temporary dependent file

@@ -94,11 +94,11 @@ end
 function linkargv(self, objectfiles, targetkind, targetfile, flags, opt)
 
     -- init arguments
-    local argv = table.join(flags, "-out:" .. targetfile, objectfiles)
+    local argv = table.join(flags, "-out:" .. os.args(targetfile), objectfiles)
 
     -- too long arguments for windows? 
     opt = opt or {}
-    local args = os.args(argv)
+    local args = os.args(argv, {escape = true})
     if #args > 1024 and not opt.rawargs then
         local argsfile = os.tmpfile(args) .. ".args.txt" 
         io.writefile(argsfile, args)
@@ -113,7 +113,28 @@ function link(self, objectfiles, targetkind, targetfile, flags, opt)
     -- ensure the target directory
     os.mkdir(path.directory(targetfile))
 
-    -- use vstool to link and enable vs_unicode_output @see https://github.com/xmake-io/xmake/issues/528
-    vstool.runv(linkargv(self, objectfiles, targetkind, targetfile, flags, opt))
+    try
+    {
+        function ()
+    
+            -- use vstool to link and enable vs_unicode_output @see https://github.com/xmake-io/xmake/issues/528
+            vstool.runv(linkargv(self, objectfiles, targetkind, targetfile, flags, opt))
+        end,
+        catch
+        {
+            function (errors)
+
+                -- use link/stdout as errors first from vstool.iorunv()
+                if type(errors) == "table" then
+                    local errs = errors.stdout or ""
+                    if #errs:trim() == 0 then
+                        errs = errors.stderr or ""
+                    end
+                    errors = errs
+                end
+                os.raise(tostring(errors))
+            end
+        }
+    }
 end
 

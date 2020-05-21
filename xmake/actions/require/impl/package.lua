@@ -22,6 +22,9 @@
 import("core.base.semver")
 import("core.base.option")
 import("core.base.global")
+import("core.base.hashset")
+import("core.base.scheduler")
+import("private.async.runjobs")
 import("lib.detect.cache", {alias = "detectcache"})
 import("core.project.project")
 import("core.package.package", {alias = "core_package"})
@@ -88,7 +91,7 @@ function _parse_require(require_str, requires_extra, parentinfo)
     else
 
         -- get repository name, package name and package url
-        local pos = packageinfo:find_last('@', true)
+        local pos = packageinfo:lastof('@', true)
         if pos then
 
             -- get package name
@@ -287,9 +290,10 @@ function _check_package_configurations(package)
 end
 
 -- load required packages
-function _load_package(packagename, requireinfo)
+function _load_package(packagename, requireinfo, opt)
 
     -- attempt to get it from cache first
+    opt = opt or {}
     local packages = _g._PACKAGES or {}
     local package = packages[packagename]
     if package then
@@ -313,7 +317,7 @@ function _load_package(packagename, requireinfo)
     end
 
     -- load package from system
-    if not package then
+    if not package and opt.system ~= false then
         package = _load_package_from_system(packagename)
     end
 
@@ -365,7 +369,7 @@ function _load_packages(requires, opt)
     for _, requireinfo in ipairs(load_requires(requires, opt.requires_extra, opt.parentinfo)) do
 
         -- load package 
-        local package = _load_package(requireinfo.name, requireinfo.info)
+        local package = _load_package(requireinfo.name, requireinfo.info, opt)
 
         -- maybe package not found and optional
         if package then
@@ -391,9 +395,9 @@ function _load_packages(requires, opt)
                         end
                     end
 
-                    -- load dependent packages
+                    -- load dependent packages and do not load system packages for package/deps()
                     local packagedeps = {}
-                    for _, dep in ipairs(_load_packages(deps, {requires_extra = extraconfs, parentinfo = requireinfo.info, nodeps = opt.nodeps})) do
+                    for _, dep in ipairs(_load_packages(deps, {requires_extra = extraconfs, parentinfo = requireinfo.info, nodeps = opt.nodeps, system = false})) do
                         dep:parents_add(package)
                         table.insert(packages, dep)
                         packagedeps[dep:name()] = dep
@@ -539,7 +543,7 @@ function _install_packages(packages_install, packages_download)
     local packages_in_group = {}
     local installing_count = 0
     local parallelize = true
-    process.runjobs(function (index)
+    runjobs("install_packages", function (index)
 
         -- fetch a new package 
         local package = nil
@@ -574,9 +578,7 @@ function _install_packages(packages_install, packages_download)
                 end
             end
             if package == nil and #packages_pending > 0 then
-                local curdir = os.curdir()
-                coroutine.yield()
-                os.cd(curdir)
+                scheduler.co_yield()
             end
         end
         if package then
@@ -591,9 +593,7 @@ function _install_packages(packages_install, packages_download)
                 end
                 if not parallelize then
                     while installing_count > 0 do
-                        local curdir = os.curdir()
-                        coroutine.yield()
-                        os.cd(curdir)
+                        scheduler.co_yield()
                     end
                 end
                 installing_count = installing_count + 1
@@ -631,7 +631,7 @@ function _install_packages(packages_install, packages_download)
         packages_installing[index] = nil
         packages_downloading[index] = nil
 
-    end, #packages_install, (option.get("verbose") or option.get("diagnosis")) and 1 or 4, 300, function (indices, tips) 
+    end, {total = #packages_install, comax = (option.get("verbose") or option.get("diagnosis")) and 1 or 4, timer = function (running_jobs_indices) 
 
         -- do not print progress info if be verbose 
         if option.get("verbose") or not show_wait then
@@ -644,7 +644,7 @@ function _install_packages(packages_install, packages_download)
         -- make installing and downloading packages list
         local installing = {}
         local downloading = {}
-        for _, index in ipairs(indices) do
+        for _, index in ipairs(running_jobs_indices) do
             local package = packages_installing[index]
             if package then
                 table.insert(installing, package:name())
@@ -654,19 +654,48 @@ function _install_packages(packages_install, packages_download)
                 table.insert(downloading, package:name())
             end
         end
-       
+
+        -- get waitobjs tips
+        local tips = nil
+        local waitobjs = scheduler.co_group_waitobjs("install_packages")
+        if waitobjs:size() > 0 then
+            local names = {}
+            for _, obj in waitobjs:keys() do
+                if obj:otype() == scheduler.OT_PROC then
+                    table.insert(names, obj:name())
+                elseif obj:otype() == scheduler.OT_SOCK then
+                    table.insert(names, "sock")
+                elseif obj:otype() == scheduler.OT_PIPE then
+                    table.insert(names, "pipe")
+                end
+            end
+            names = table.unique(names)
+            if #names > 0 then
+                names = table.concat(names, ",")
+                if #names > 16 then
+                    names = names:sub(1, 16) .. ".."
+                end
+                tips = string.format("(%d/%s)", waitobjs:size(), names)
+            end
+        end
+
         -- trace
         utils.clearline()
-        cprintf("${yellow}  => ${clear}")
+        cprintf("${yellow}  => ")
         if #downloading > 0 then
-            cprintf("downloading ${magenta}%s${clear}", table.concat(downloading, ", "))
+            cprintf("downloading ${magenta}%s", table.concat(downloading, ", "))
         end
         if #installing > 0 then
-            cprintf("%sinstalling ${magenta}%s${clear}", #downloading > 0 and ", " or "", table.concat(installing, ", "))
+            cprintf("%sinstalling ${magenta}%s", #downloading > 0 and ", " or "", table.concat(installing, ", "))
         end
-        cprintf(" .. ${dim}%s${clear}%s", tips and (tips .. " ") or "", waitchars[waitindex + 1])
+        cprintf(" .. %s%s", tips and ("${dim}" .. tips .. "${clear} ") or "", waitchars[waitindex + 1])
         io.flush()
-    end)
+    end, exit = function(errors)
+        if errors then
+            utils.clearline()
+            io.flush()
+        end
+    end})
 end
 
 -- the cache directory
@@ -718,14 +747,14 @@ function install_packages(requires, opt)
     local packages = load_packages(requires, opt)
 
     -- fetch packages (with system) from local first
-    process.runjobs(function (index)
+    runjobs("fetch_packages", function (index)
         local package = packages[index]
         if package and (not option.get("force") or (option.get("shallow") and package:parents())) then
             package:envs_enter()
             package:fetch()
             package:envs_leave()
         end
-    end, #packages)
+    end, {total = #packages})
 
     -- filter packages
     local packages_install = {}
@@ -802,6 +831,36 @@ function uninstall_packages(requires, opt)
             table.insert(packages, instance)
         end
         os.tryrm(instance:installdir())
+    end
+    return packages
+end
+
+-- export packages
+function export_packages(requires, opt)
+
+    -- init options
+    opt = opt or {}
+
+    -- do not export dependent packages
+    opt.nodeps = true
+
+    -- get the export directory
+    local exportdir = assert(opt.exportdir)
+
+    -- export all packages
+    local packages = {}
+    for _, instance in ipairs(load_packages(requires, opt)) do
+
+        -- get the exported name
+        local name = instance:name():lower():gsub("::", "_")
+        if instance:version_str() then
+            name = name .. "_" .. instance:version_str()
+        end
+        name = name .. "_" .. instance:buildhash()
+
+        -- export this package
+        os.cp(instance:installdir(), path.join(exportdir, name))
+        table.insert(packages, instance)
     end
     return packages
 end

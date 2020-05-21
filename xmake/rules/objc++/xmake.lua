@@ -20,16 +20,51 @@
 
 -- define rule: objc.build
 rule("objc.build")
-    set_extensions(".m")    
+    set_sourcekinds("mm")
     add_deps("c.build.pcheader")
-    on_build_files("private.action.build.object")
+    after_load(function (target)
+        if target:values("objc.build.arc") ~= false then
+            target:add("mflags", "-fobjc-arc")
+        else
+            target:add("mflags", "-fno-objc-arc")
+        end
+        if is_plat("macosx", "iphoneos", "watchos") then
+            target:add("frameworks", "Foundation", "CoreFoundation")
+        end
+    end)
+    on_build_files("private.action.build.object", {batch = true})
 
 -- define rule: objc++.build
 rule("objc++.build")
-    set_extensions(".mm")    
+    set_sourcekinds("mxx")
     add_deps("c++.build.pcheader")
-    on_build_files("private.action.build.object")
+    after_load(function (target)
+        if target:values("objc++.build.arc") ~= false then
+            target:add("mxxflags", "-fobjc-arc")
+        else
+            target:add("mxxflags", "-fno-objc-arc")
+        end
+        if is_plat("macosx", "iphoneos", "watchos") then
+            target:add("frameworks", "Foundation", "CoreFoundation")
+        end
+    end)
+    on_build_files("private.action.build.object", {batch = true})
 
 -- define rule: objc
 rule("objc++")
-    add_deps("objc++.build", "objc.build", "utils.merge.object", "utils.merge.archive")
+
+    -- add build rules
+    add_deps("objc++.build", "objc.build")
+
+    -- inherit links and linkdirs of all dependent targets by default
+    add_deps("utils.inherit.links")
+
+    -- support `add_files("src/*.o")` and `add_files("src/*.a")` to merge object and archive files to target
+    add_deps("utils.merge.object", "utils.merge.archive")
+
+    -- we attempt to extract symbols to the independent file and 
+    -- strip self-target binary if `set_symbols("debug")` and `set_strip("all")` are enabled
+    add_deps("utils.symbols.extract")
+
+    -- check targets
+    add_deps("utils.check.targets")

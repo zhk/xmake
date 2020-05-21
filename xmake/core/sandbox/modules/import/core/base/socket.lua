@@ -40,8 +40,8 @@ sandbox_core_base_socket.IPV6    = socket.IPV6
 -- export the socket events
 sandbox_core_base_socket.EV_RECV = socket.EV_RECV
 sandbox_core_base_socket.EV_SEND = socket.EV_SEND
-sandbox_core_base_socket.EV_CONN = socket.EV_SEND
-sandbox_core_base_socket.EV_ACPT = socket.EV_RECV
+sandbox_core_base_socket.EV_CONN = socket.EV_CONN
+sandbox_core_base_socket.EV_ACPT = socket.EV_ACPT
 
 -- wrap socket
 function _socket_wrap(sock)
@@ -224,19 +224,19 @@ end
 -- open and connect tcp socket
 function sandbox_core_base_socket.connect(addr, port, opt)
     local sock, errors = socket.connect(addr, port, opt)
-    if not sock then
+    if not sock and errors then
         raise(errors)
     end
-    return _socket_wrap(sock)
+    return sock and _socket_wrap(sock) or nil
 end
 
 -- open and connect tcp socket from the unix socket
 function sandbox_core_base_socket.connect_unix(addr, opt)
     local sock, errors = socket.connect_unix(addr, opt)
-    if not sock then
+    if not sock and errors then
         raise(errors)
     end
-    return _socket_wrap(sock)
+    return sock and _socket_wrap(sock) or nil
 end
 
 -- return module

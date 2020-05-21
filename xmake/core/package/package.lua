@@ -395,6 +395,10 @@ function _instance:envs()
         if self:kind() == "binary" then
             envs.PATH = {"bin"}
         end
+        -- add LD_LIBRARY_PATH to load *.so directory
+        if os.host() ~= "windows" and self:is_plat(os.host()) and self:is_arch(os.arch()) then
+            envs.LD_LIBRARY_PATH = {"lib"}
+        end
         self._ENVS = envs
     end
     return envs
@@ -425,7 +429,7 @@ function _instance:envs_enter()
     local installdir = self:installdir()
     for name, values in pairs(self:envs()) do
         oldenvs[name] = oldenvs[name] or os.getenv(name)
-        if name == "PATH" then
+        if name == "PATH" or name == "LD_LIBRARY_PATH" then
             for _, value in ipairs(values) do
                 if path.is_absolute(value) then
                     os.addenv(name, value)
@@ -733,9 +737,9 @@ function _instance:script(name, generic)
         -- `@linux|x86_64`
         -- `@macosx,linux`
         -- `android@macosx,linux`
-        -- `android|armv7-a@macosx,linux`
-        -- `android|armv7-a@macosx,linux|x86_64`
-        -- `android|armv7-a@linux|x86_64`
+        -- `android|armeabi-v7a@macosx,linux`
+        -- `android|armeabi-v7a@macosx,linux|x86_64`
+        -- `android|armeabi-v7a@linux|x86_64`
         --
         for _pattern, _script in pairs(script) do
             local hosts = {}
@@ -802,6 +806,11 @@ function _instance:fetch(opt)
     -- true: only find system package
     -- false: only find xmake packages
     local system = opt.system or self:requireinfo().system
+    if self:is3rd() then
+        -- we need ignore `{system = true/false}` argument if be 3rd package
+        -- @see https://github.com/xmake-io/xmake/issues/726
+        system = nil
+    end
 
     -- fetch binary tool?
     fetchinfo = nil
@@ -918,13 +927,57 @@ function _instance:patches()
                 patches = {}
                 patchinfos = table.wrap(patchinfos)
                 for idx = 1, #patchinfos, 2 do
-                    table.insert(patches , {patchinfos[idx], patchinfos[idx + 1]})
+                    table.insert(patches , {url = patchinfos[idx], sha256 = patchinfos[idx + 1]})
                 end
             end
         end
         self._PATCHES = patches or false
     end
     return patches and patches or nil
+end
+
+-- get the resources of the current version
+function _instance:resources()
+    local resources = self._RESOURCES
+    if resources == nil then
+        local resourceinfos = self:get("resources")
+        if resourceinfos then
+            local version_str = self:version_str()
+            resourceinfos = resourceinfos[version_str]
+            if resourceinfos then
+                resources = {}
+                resourceinfos = table.wrap(resourceinfos)
+                for idx = 1, #resourceinfos, 3 do
+                    local name = resourceinfos[idx]
+                    resources[name] = {url = resourceinfos[idx + 1], sha256 = resourceinfos[idx + 2]}
+                end
+            end
+        end
+        self._RESOURCES = resources or false
+    end
+    return resources and resources or nil
+end
+
+-- get the the given resource 
+function _instance:resource(name)
+    local resources = self:resources()
+    return resources and resources[name] or nil
+end
+
+-- get the the given resource file
+function _instance:resourcefile(name)
+    local resource = self:resource(name)
+    if resource and resource.url then
+        return path.join(self:cachedir(), "resources", name, (path.filename(resource.url):gsub("%?.+$", "")))
+    end
+end
+
+-- get the the given resource directory
+function _instance:resourcedir(name)
+    local resource = self:resource(name)
+    if resource and resource.url then
+        return path.join(self:cachedir(), "resources", name, (path.filename(resource.url):gsub("%?.+$", "")) .. ".dir")
+    end
 end
 
 -- has the given c funcs?
@@ -1078,6 +1131,7 @@ function package.apis()
         {
             -- package.add_xxx
             "package.add_patches"
+        ,   "package.add_resources"
         }
     ,   dictionary = 
         {

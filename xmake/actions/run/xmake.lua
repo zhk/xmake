@@ -41,15 +41,30 @@ task("run")
                 -- options
             ,   options = 
                 {
-                    {'d', "debug",      "k",   nil,          "Run and debug the given target."                                    }
-                ,   {'a', "all",        "k",   nil,          "Run all targets."                                                   }
-                ,   {'w', "workdir",    "kv",  nil,          "Work directory of running targets, default is folder of targetfile",
-                                                             "e.g.",
-                                                             "    --workdir=.",
-                                                             "    --workdir=`pwd`"                                                }
-                ,   {}
-                ,   {nil, "target",     "v",   nil,          "Run the given target."                                              }
-                ,   {nil, "arguments",  "vs",  nil,         "The target arguments"                                                }
+                    {'d', "debug",      "k",   nil  , "Run and debug the given target."                                    }
+                ,   {'a', "all",        "k",   nil  , "Run all targets."                                                   }
+                ,   {'w', "workdir",    "kv",  nil  , "Work directory of running targets, default is folder of targetfile",
+                                                      "e.g.",
+                                                      "    --workdir=.",
+                                                      "    --workdir=`pwd`"                                                }
+                ,   {}  
+                ,   {nil, "target",     "v",   nil  , "The target name. It will run all default targets if this parameter is not specified."
+                                                    , values = function () 
+                                                        return try{
+                                                            function ()
+                                                                import("core.project.project")
+                                                                local targets = project.targets()
+                                                                local runable = {}
+                                                                for k, v in pairs(targets) do
+                                                                    if v:script("run") or v:get("kind") == "binary" then
+                                                                        table.insert(runable, k)
+                                                                    end
+                                                                end
+                                                                return runable
+                                                            end
+                                                        }
+                                                      end                                                                  }
+                ,   {nil, "arguments",  "vs",  nil  , "The target arguments"                                               }
                 }
             }
 

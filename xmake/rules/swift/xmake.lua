@@ -20,9 +20,17 @@
 
 -- define rule: swift.build
 rule("swift.build")
-    set_extensions(".swift")    
-    on_build_files("private.action.build.object")
+    set_sourcekinds("sc")    
+    on_build_files("private.action.build.object", {batch = true})
 
 -- define rule: swift
 rule("swift")
-    add_deps("swift.build", "utils.merge.object")
+
+    -- add build rules
+    add_deps("swift.build")
+    
+    -- support `add_files("src/*.o")` to merge object files to target
+    add_deps("utils.merge.object")
+
+    -- check targets
+    add_deps("utils.check.targets")

@@ -28,9 +28,16 @@ local serialize  = require("base/serialize")
 -- save original interfaces
 string._dump = string._dump or string.dump
 string._trim = string._trim or string.trim
+string._split = string._split or string.split
+string._lastof = string._lastof or string.lastof
 
 -- find the last substring with the given pattern
-function string:find_last(pattern, plain)
+function string:lastof(pattern, plain)
+
+    -- is plain text? use the native implementation
+    if plain then
+        return string._lastof(self, pattern)
+    end
 
     -- find the last substring
     local curr = 0
@@ -72,22 +79,35 @@ end
 -- ("1.2.3.4.5"):split('%.', {limit = 3}) => 1, 2, 3.4.5
 --
 function string:split(delimiter, opt)
-    local result = {}
+    local limit, plain, strict
+    if opt then
+        limit = opt.limit
+        plain = opt.plain
+        strict = opt.strict
+    end
+    if plain then
+        return string._split(self, delimiter, strict, limit)
+    end
     local start = 1
-    local pos, epos = self:find(delimiter, start, opt and opt.plain) 
+    local result = {}
+    local pos, epos = self:find(delimiter, start, plain)
     while pos do
         local substr = self:sub(start, pos - 1)
-        if (#substr > 0) or (opt and opt.strict) then
-            if opt and opt.limit and opt.limit > 0 and #result + 1 >= opt.limit then
+        if (#substr > 0) or strict then
+            if limit and limit > 0 and #result + 1 >= limit then
                 break
             end
             table.insert(result, substr)
         end
         start = epos + 1
-        pos, epos = self:find(delimiter, start, opt and opt.plain) 
+        pos, epos = self:find(delimiter, start, plain) 
     end
     if start <= #self then
         table.insert(result, self:sub(start))
+    elseif strict and (not limit or #result < limit) then
+        if start == #self + 1 then
+            table.insert(result, "")
+        end
     end
     return result
 end

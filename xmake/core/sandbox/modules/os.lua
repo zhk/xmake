@@ -35,12 +35,16 @@ local sandbox_os = sandbox_os or {}
 -- inherit some builtin interfaces
 sandbox_os.host         = os.host
 sandbox_os.arch         = os.arch
+sandbox_os.subhost      = os.subhost
+sandbox_os.subarch      = os.subarch
+sandbox_os.syserror     = os.syserror
+sandbox_os.strerror     = os.strerror
 sandbox_os.exit         = os.exit
 sandbox_os.date         = os.date
 sandbox_os.time         = os.time
 sandbox_os.args         = os.args
+sandbox_os.args         = os.args
 sandbox_os.argv         = os.argv
-sandbox_os.argw         = os.argw
 sandbox_os.mtime        = os.mtime
 sandbox_os.raise        = os.raise
 sandbox_os.fscase       = os.fscase
@@ -58,151 +62,108 @@ sandbox_os.pbcopy       = os.pbcopy
 sandbox_os.cpuinfo      = os.cpuinfo
 sandbox_os.emptydir     = os.emptydir
 sandbox_os.filesize     = os.filesize
+sandbox_os.features     = os.features
 sandbox_os.workingdir   = os.workingdir
 sandbox_os.programdir   = os.programdir
 sandbox_os.programfile  = os.programfile
 sandbox_os.projectdir   = os.projectdir
 sandbox_os.projectfile  = os.projectfile
 sandbox_os.getwinsize   = os.getwinsize
-sandbox_os.user_agent   = os.user_agent
+
+-- syserror code
+sandbox_os.SYSERR_UNKNOWN     = os.SYSERR_UNKNOWN
+sandbox_os.SYSERR_NONE        = os.SYSERR_NONE
+sandbox_os.SYSERR_NOT_PERM    = os.SYSERR_NOT_PERM
+sandbox_os.SYSERR_NOT_FILEDIR = os.SYSERR_NOT_FILEDIR
 
 -- copy file or directory
-function sandbox_os.cp(...)
-    
-    -- format arguments
-    local args = {}
-    for _, arg in ipairs({...}) do
-        table.insert(args, vformat(arg))
-    end
-
-    -- done
-    local ok, errors = os.cp(unpack(args))
+function sandbox_os.cp(srcpath, dstpath, opt)
+    assert(srcpath and dstpath)
+    local ok, errors = os.cp(vformat(srcpath), vformat(dstpath), opt)
     if not ok then
         os.raise(errors)
     end
 end
 
 -- move file or directory
-function sandbox_os.mv(...)
-    
-    -- format arguments
-    local args = {}
-    for _, arg in ipairs({...}) do
-        table.insert(args, vformat(arg))
-    end
-
-    -- done
-    local ok, errors = os.mv(unpack(args))
+function sandbox_os.mv(srcpath, dstpath)
+    assert(srcpath and dstpath)
+    local ok, errors = os.mv(vformat(srcpath), vformat(dstpath))
     if not ok then
         os.raise(errors)
     end
 end
 
 -- remove files or directories
-function sandbox_os.rm(...)
-    
-    -- format arguments
-    local args = {}
-    for _, arg in ipairs({...}) do
-        table.insert(args, vformat(arg))
-    end
-
-    -- remove it
-    local ok, errors = os.rm(unpack(args))
+function sandbox_os.rm(filepath)
+    assert(filepath)
+    local ok, errors = os.rm(vformat(filepath))
     if not ok then
         os.raise(errors)
     end
 end
 
 -- link file or directory to the new symfile
-function sandbox_os.ln(filedir, symfile)
-    local ok, errors = os.ln(filedir, symfile)
+function sandbox_os.ln(srcpath, dstpath)
+    assert(srcpath and dstpath)
+    local ok, errors = os.ln(vformat(srcpath), vformat(dstpath))
     if not ok then
         os.raise(errors)
     end
 end
 
 -- copy file or directory with the verbose info
-function sandbox_os.vcp(...)
+function sandbox_os.vcp(srcpath, dstpath, opt)
+    assert(srcpath and dstpath)
     if option.get("verbose") then
-        local srcfile, dstfile = ...
-        if srcfile and dstfile then
-            utils.cprint("${dim}> copy %s to %s ..", srcfile, dstfile)
-        end
+        utils.cprint("${dim}> copy %s to %s", srcpath, dstpath)
     end
-    return sandbox_os.cp(...)
+    return sandbox_os.cp(srcpath, dstpath, opt)
 end 
 
 -- move file or directory with the verbose info
-function sandbox_os.vmv(...)
+function sandbox_os.vmv(srcpath, dstpath)
+    assert(srcpath and dstpath)
     if option.get("verbose") then
-        local srcfile, dstfile = ...
-        if srcfile and dstfile then
-            utils.cprint("${dim}> move %s to %s ..", srcfile, dstfile)
-        end
+        utils.cprint("${dim}> move %s to %s", srcpath, dstpath)
     end
-    return sandbox_os.mv(...)
+    return sandbox_os.mv(srcpath, dstpath)
 end 
 
 -- remove file or directory with the verbose info
-function sandbox_os.vrm(...)
+function sandbox_os.vrm(filepath)
+    assert(filepath)
     if option.get("verbose") then
-        local file = ...
-        if file then
-            utils.cprint("${dim}> remove %s ..", file)
-        end
+        utils.cprint("${dim}> remove %s", filepath)
     end
-    return sandbox_os.rm(...)
+    return sandbox_os.rm(filepath)
 end 
 
 -- link file or directory with the verbose info
-function sandbox_os.vln(...)
+function sandbox_os.vln(srcpath, dstpath)
+    assert(srcpath and dstpath)
     if option.get("verbose") then
-        local srcfile, dstfile = ...
-        if srcfile and dstfile then
-            utils.cprint("${dim}> link %s to %s ..", srcfile, dstfile)
-        end
+        utils.cprint("${dim}> link %s to %s", srcpath, dstpath)
     end
-    return sandbox_os.ln(...)
+    return sandbox_os.ln(srcpath, dstpath)
 end 
 
 -- try to copy file or directory
-function sandbox_os.trycp(...)
-    
-    -- format arguments
-    local args = {}
-    for _, arg in ipairs({...}) do
-        table.insert(args, vformat(arg))
-    end
-
-    -- done
-    return os.cp(unpack(args))
+function sandbox_os.trycp(srcpath, dstpath)
+    assert(srcpath and dstpath)
+    return os.cp(vformat(srcpath), vformat(dstpath))
 end
 
 -- try to move file or directory
-function sandbox_os.trymv(...)
-    
-    -- format arguments
-    local args = {}
-    for _, arg in ipairs({...}) do
-        table.insert(args, vformat(arg))
-    end
-
-    -- done
-    return os.mv(unpack(args))
+function sandbox_os.trymv(srcpath, dstpath)
+    assert(srcpath and dstpath)
+    return os.mv(vformat(srcpath), vformat(dstpath))
 end
 
 -- try to remove files or directories
-function sandbox_os.tryrm(...)
-    
-    -- format arguments
-    local args = {}
-    for _, arg in ipairs({...}) do
-        table.insert(args, vformat(arg))
-    end
-
-    -- remove it
-    return os.rm(unpack(args))
+function sandbox_os.tryrm(filepath)
+    assert(filepath)
+    return os.rm(vformat(filepath))
 end
 
 -- change to directory
@@ -225,32 +186,18 @@ function sandbox_os.cd(dir)
 end
 
 -- create directories
-function sandbox_os.mkdir(...)
-   
-    -- format arguments
-    local args = {}
-    for _, arg in ipairs({...}) do
-        table.insert(args, vformat(arg))
-    end
-
-    -- done
-    local ok, errors = os.mkdir(unpack(args))
+function sandbox_os.mkdir(dir)
+    assert(dir) 
+    local ok, errors = os.mkdir(vformat(dir))
     if not ok then
         os.raise(errors)
     end
 end
 
 -- remove directories
-function sandbox_os.rmdir(...)
-    
-    -- format arguments
-    local args = {}
-    for _, arg in ipairs({...}) do
-        table.insert(args, vformat(arg))
-    end
-
-    -- done
-    local ok, errors = os.rmdir(unpack(args))
+function sandbox_os.rmdir(dir)
+    assert(dir)
+    local ok, errors = os.rmdir(vformat(dir))
     if not ok then
         os.raise(errors)
     end
@@ -262,13 +209,13 @@ function sandbox_os.curdir()
 end
 
 -- get the temporary directory
-function sandbox_os.tmpdir()
-    return assert(os.tmpdir())
+function sandbox_os.tmpdir(opt)
+    return assert(os.tmpdir(opt))
 end
 
 -- get the temporary file
-function sandbox_os.tmpfile(key)
-    return assert(os.tmpfile(key))
+function sandbox_os.tmpfile(key, opt)
+    return assert(os.tmpfile(key, opt))
 end
 
 -- get the script directory
@@ -321,7 +268,7 @@ function sandbox_os.vrun(cmd, ...)
     end
 
     -- run it
-    utils.ifelse(option.get("verbose"), sandbox_os.exec, sandbox_os.run)(cmd, ...)  
+    (option.get("verbose") and sandbox_os.exec or sandbox_os.run)(cmd, ...)  
 end
 
 -- quietly run command with arguments list and echo verbose info if [-v|--verbose] option is enabled
@@ -329,11 +276,13 @@ function sandbox_os.vrunv(program, argv, opt)
 
     -- echo command
     if option.get("verbose") then
-        print(vformat(program) .. " " .. table.concat(argv, " "))
+        print(vformat(program) .. " " .. sandbox_os.args(argv))
     end
 
     -- run it
-    utils.ifelse(option.get("verbose"), sandbox_os.execv, sandbox_os.runv)(program, argv, opt)  
+    if not (opt and opt.dryrun) then
+        (option.get("verbose") and sandbox_os.execv or sandbox_os.runv)(program, argv, opt)
+    end
 end
 
 -- run command and return output and error data
@@ -343,11 +292,13 @@ function sandbox_os.iorun(cmd, ...)
     cmd = vformat(cmd, ...)
 
     -- run it
-    local ok, outdata, errdata = os.iorun(cmd)
+    local ok, outdata, errdata, errors = os.iorun(cmd)
     if not ok then
-        local errors = errdata or ""
-        if #errors:trim() == 0 then
-            errors = outdata or ""
+        if not errors then
+            errors = errdata or ""
+            if #errors:trim() == 0 then
+                errors = outdata or ""
+            end
         end
         os.raise({errors = errors, stderr = errdata, stdout = outdata})
     end
@@ -363,11 +314,13 @@ function sandbox_os.iorunv(program, argv, opt)
     program = vformat(program)
 
     -- run it
-    local ok, outdata, errdata = os.iorunv(program, argv, opt)
+    local ok, outdata, errdata, errors = os.iorunv(program, argv, opt)
     if not ok then
-        local errors = errdata or ""
-        if #errors:trim() == 0 then
-            errors = outdata or ""
+        if not errors then
+            errors = errdata or ""
+            if #errors:trim() == 0 then
+                errors = outdata or ""
+            end
         end
         os.raise({errors = errors, stderr = errdata, stdout = outdata})
     end
@@ -383,9 +336,14 @@ function sandbox_os.exec(cmd, ...)
     cmd = vformat(cmd, ...)
 
     -- run it
-    local ok = os.exec(cmd)
+    local ok, errors = os.exec(cmd)
     if ok ~= 0 then
-        os.raise("exec(%s) failed(%d)!", cmd, ok)
+        if ok ~= nil then
+            errors = string.format("exec(%s) failed(%d)", cmd, ok)
+        else
+            errors = string.format("cannot exec(%s), %s", cmd, errors and errors or "unknown reason")
+        end
+        os.raise(errors)
     end
 end
 
@@ -411,15 +369,54 @@ function sandbox_os.execv(program, argv, opt)
 
     -- run it
     opt = opt or {}
-    local ok = os.execv(program, argv, opt)
+    local ok, errors = os.execv(program, argv, opt)
     if ok ~= 0 and not opt.try then
-        if argv ~= nil then
-            os.raise("execv(%s %s) failed(%d)!", program, table.concat(argv, ' '), ok)
-        else
-            os.raise("execv(%s) failed(%d)!", program, ok)
+
+        -- get command
+        local cmd = program
+        if argv then
+            cmd = cmd .. " " .. os.args(argv)
         end
+
+        -- get errors
+        if ok ~= nil then
+            errors = string.format("execv(%s) failed(%d)", cmd, ok)
+        else
+            errors = string.format("cannot execv(%s), %s", cmd, errors and errors or "unknown reason")
+        end
+        os.raise(errors)
     end
-    return ok
+
+    -- we need return results if opt.try is enabled
+    return ok, errors
+end
+
+-- execute command and echo verbose info if [-v|--verbose] option is enabled
+function sandbox_os.vexec(cmd, ...)
+
+    -- echo command
+    if option.get("verbose") then
+        utils.cprint("${color.dump.string}" .. vformat(cmd, ...))
+    end
+
+    -- run it
+    sandbox_os.exec(cmd, ...)  
+end
+
+-- execute command with arguments list and echo verbose info if [-v|--verbose] option is enabled
+function sandbox_os.vexecv(program, argv, opt)
+
+    -- echo command
+    if option.get("verbose") then
+        utils.cprint("${color.dump.string}" .. vformat(program) .. " " .. sandbox_os.args(argv))
+    end
+
+    -- run it
+    if not (opt and opt.dryrun) then
+        return sandbox_os.execv(program, argv, opt)
+    else
+        return 0
+    end
 end
 
 -- match files or directories
@@ -484,7 +481,7 @@ end
 -- sleep (support in coroutine)
 function sandbox_os.sleep(ms)
     if scheduler:co_running() then
-        local ok, errors = scheduler:sleep(ms)
+        local ok, errors = scheduler:co_sleep(ms)
         if not ok then
             raise(errors)
         end

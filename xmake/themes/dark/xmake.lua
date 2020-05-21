@@ -26,15 +26,15 @@ theme("dark")
     set_color("success", "green")
 
     -- the failure status 
-    set_text("failure", "failed")
+    set_text("failure", "$failed")
     set_color("failure", "red")
 
     -- the nothing status 
-    set_text("nothing", "no")
+    set_text("nothing", "$no")
     set_color("nothing", "red")
 
     -- the error info
-    set_text("error", "error")
+    set_text("error", "$error")
     set_color("error", "red")
 
     -- the warning info
@@ -72,3 +72,9 @@ theme("dark")
     set_color("menu.main.task.name", "magenta")
     set_color("menu.option.name", "green")
     set_color("menu.usage", "cyan")
+
+    -- interactive mode
+    set_text("interactive.prompt", "xmake>")
+    set_text("interactive.prompt2", "xmake>>")
+    set_color("interactive.prompt", "green")
+    set_color("interactive.prompt2", "green")

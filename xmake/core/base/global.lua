@@ -28,11 +28,6 @@ local path          = require("base/path")
 local utils         = require("base/utils")
 local option        = require("base/option")
 
--- get the configure file
-function global._file()
-    return path.join(global.directory(), "xmake.conf")
-end
-
 -- get the current given configure
 function global.get(name)
     local value = nil
@@ -91,11 +86,26 @@ function global.options()
     return configs
 end
 
+-- get the configure file
+function global.filepath()
+    return path.join(global.directory(), xmake._NAME .. ".conf")
+end
+
 -- get the global configure directory
 function global.directory()
     if global._DIRECTORY == nil then
-        local rootdir = os.getenv("XMAKE_GLOBALDIR") or path.translate("~")
-        global._DIRECTORY = path.join(rootdir, ".xmake")
+        local name = "." .. xmake._NAME
+        local rootdir = os.getenv("XMAKE_GLOBALDIR")
+        if not rootdir then
+            -- compatible with the old `%appdata%/.xmake` directory if it exists
+            local appdata = (os.host() == "windows") and os.getenv("APPDATA")
+            if appdata and os.isdir(path.join(appdata, name)) then
+                rootdir = appdata
+            else
+                rootdir = path.translate("~")
+            end
+        end
+        global._DIRECTORY = path.join(rootdir, name)
     end
     return global._DIRECTORY
 end
@@ -104,7 +114,7 @@ end
 function global.load()
 
     -- load configure from the file first
-    local filepath = global._file()
+    local filepath = global.filepath()
     if os.isfile(filepath) then
 
         -- load configs
@@ -134,7 +144,7 @@ function global.save()
     options.__version = xmake._VERSION_SHORT
 
     -- save it
-    return io.save(global._file(), options) 
+    return io.save(global.filepath(), options) 
 end
 
 -- clear config

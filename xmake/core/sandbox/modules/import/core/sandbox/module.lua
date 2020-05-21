@@ -165,7 +165,7 @@ function core_sandbox_module._load(dir, name, instance, module)
                 end
 
                 -- bind main entry 
-                if result.main then
+                if type(result) == "table" and result.main then
                     setmetatable(result, { __call = function (_, ...) return result.main(...) end})
                 end
 
@@ -276,7 +276,7 @@ function core_sandbox_module.name(name)
     assert(name)
 
     -- find modulename
-    local i = name:find_last(".", true)
+    local i = name:lastof(".", true)
     if i then
         name = name:sub(i + 1)
     end
@@ -287,15 +287,17 @@ end
 
 -- get module directories
 function core_sandbox_module.directories()
-
-    -- init directories
-    local directories = core_sandbox_module._DIRS or {      path.join(global.directory(), "modules")
-                                                      ,     path.join(os.programdir(), "modules")
-                                                      ,     path.join(os.programdir(), "core/sandbox/modules/import")
-                                                      }
-                        
-    -- save directories to cache
-    core_sandbox_module._DIRS = directories
+    local directories = core_sandbox_module._DIRS 
+    if not directories then
+        directories = { path.join(global.directory(), "modules"),
+                        path.join(os.programdir(), "modules"),
+                        path.join(os.programdir(), "core/sandbox/modules/import")}
+        local modulesdir = os.getenv("XMAKE_MODULES_DIR")
+        if modulesdir and os.isdir(modulesdir) then
+            table.insert(directories, 1, modulesdir)
+        end
+        core_sandbox_module._DIRS = directories
+    end
     return directories
 end
 
@@ -402,7 +404,7 @@ function core_sandbox_module.import(name, opt)
         local errors2 = nil
         local module2_name = nil
         local interface_name = nil
-        local pos = name:find_last('.', true)
+        local pos = name:lastof('.', true)
         if pos then
             module2_name = name:sub(1, pos - 1)
             interface_name = name:sub(pos + 1)

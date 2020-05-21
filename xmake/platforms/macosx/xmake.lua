@@ -31,7 +31,7 @@ platform("macosx")
     set_archs("i386", "x86_64")
 
     -- set formats
-    set_formats {static = "lib$(name).a", object = "$(name).o", shared = "lib$(name).dylib", symbol = "$(name).sym"}
+    set_formats {static = "lib$(name).a", object = "$(name).o", shared = "lib$(name).dylib", symbol = "$(name).dSYM"}
 
     -- set install directory
     set_installdir("/usr/local")
@@ -49,25 +49,31 @@ platform("macosx")
     set_menu {
                 config = 
                 {   
-                    {category = "XCode SDK Configuration"                                           }
-                ,   {nil, "xcode",          "kv", "auto",       "The Xcode Application Directory"   }
-                ,   {nil, "xcode_sdkver",   "kv", "auto",       "The SDK Version for Xcode"         }
-                ,   {nil, "target_minver",  "kv", "auto",       "The Target Minimal Version"        }
-                ,   {category = "Cuda SDK Configuration"                                            }
-                ,   {nil, "cuda",           "kv", "auto",       "The Cuda SDK Directory"            }
-                ,   {category = "Qt SDK Configuration"                                              }
-                ,   {nil, "qt",             "kv", "auto",       "The Qt SDK Directory"              }
-                ,   {nil, "qt_sdkver",      "kv", "auto",       "The Qt SDK Version"                }
+                    {category = "XCode SDK Configuration"                                                    }
+                ,   {nil, "xcode",                   "kv", "auto",       "The Xcode Application Directory"   }
+                ,   {nil, "xcode_sdkver",            "kv", "auto",       "The SDK Version for Xcode"         }
+                ,   {nil, "xcode_bundle_identifier", "kv", "auto",       "The Bundle Identifier for Xcode"   }
+                ,   {nil, "xcode_codesign_identity", "kv", "auto",       "The Codesign Identity for Xcode"   }
+                ,   {nil, "xcode_mobile_provision",  "kv", "auto",       "The Mobile Provision for Xcode"    }
+                ,   {nil, "target_minver",           "kv", "auto",       "The Target Minimal Version"        }
+                ,   {category = "Cuda SDK Configuration"                                                     }
+                ,   {nil, "cuda",                    "kv", "auto",       "The Cuda SDK Directory"            }
+                ,   {category = "Qt SDK Configuration"                                                       }
+                ,   {nil, "qt",                      "kv", "auto",       "The Qt SDK Directory"              }
+                ,   {nil, "qt_sdkver",               "kv", "auto",       "The Qt SDK Version"                }
                 }
 
             ,   global = 
                 {   
-                    {category = "XCode SDK Configuration"                                           }
-                ,   {nil, "xcode",          "kv", "auto",       "The Xcode Application Directory"   }
-                ,   {category = "Cuda SDK Configuration"                                            }
-                ,   {nil, "cuda",           "kv", "auto",       "The Cuda SDK Directory"            }
-                ,   {category = "Qt SDK Configuration"                                              }
-                ,   {nil, "qt",             "kv", "auto",       "The Qt SDK Directory"              }
+                    {category = "XCode SDK Configuration"                                                    }
+                ,   {nil, "xcode",                   "kv", "auto",       "The Xcode Application Directory"   }
+                ,   {nil, "xcode_bundle_identifier", "kv", "auto",       "The Bundle Identifier for Xcode"   }
+                ,   {nil, "xcode_codesign_identity", "kv", "auto",       "The Codesign Identity for Xcode"   }
+                ,   {nil, "xcode_mobile_provision",  "kv", "auto",       "The Mobile Provision for Xcode"    }
+                ,   {category = "Cuda SDK Configuration"                                                     }
+                ,   {nil, "cuda",                    "kv", "auto",       "The Cuda SDK Directory"            }
+                ,   {category = "Qt SDK Configuration"                                                       }
+                ,   {nil, "qt",                      "kv", "auto",       "The Qt SDK Directory"              }
                 }
             }
 

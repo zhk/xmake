@@ -1,6 +1,11 @@
 -- add target
 target("demo")
 
+    -- disable this target if only build libaries
+    if has_config("onlylib") then
+        set_default(false)
+    end
+
     -- add deps
     add_deps("xmake")
 
@@ -9,9 +14,6 @@ target("demo")
 
     -- add defines
     add_defines("__tb_prefix__=\"xmake\"")
-
-    -- set the object files directory
-    set_objectdir("$(buildir)/.objs")
 
     -- add includes directory
     add_includedirs("$(projectdir)", "$(projectdir)/src")
@@ -32,6 +34,8 @@ target("demo")
         add_links("m", "c")
     elseif is_plat("macosx") then
         add_ldflags("-all_load", "-pagezero_size 10000", "-image_base 100000000")
+    elseif is_plat("mingw") then
+        add_ldflags("-static-libgcc", {force = true})
     else
         add_links("pthread", "dl", "m", "c")
     end

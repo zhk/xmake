@@ -24,6 +24,7 @@ import("core.theme.theme")
 import("core.tool.compiler")
 import("core.project.depend")
 import("private.tools.ccache")
+import("private.async.runjobs")
 
 -- do build file
 function _do_build_file(target, sourcefile, opt)
@@ -44,8 +45,10 @@ function _do_build_file(target, sourcefile, opt)
     local dependinfo = option.get("rebuild") and {} or (depend.load(dependfile) or {})
     
     -- need build this object?
+    -- @note we use mtime(dependfile) instead of mtime(objectfile) to ensure the object file is is fully compiled.
+    -- @see https://github.com/xmake-io/xmake/issues/748
     local depvalues = {compinst:program(), compflags}
-    if not depend.is_changed(dependinfo, {lastmtime = os.mtime(objectfile), values = depvalues}) then
+    if not depend.is_changed(dependinfo, {lastmtime = os.mtime(dependfile), values = depvalues}) then
         return 
     end
 
@@ -57,11 +60,11 @@ function _do_build_file(target, sourcefile, opt)
 
     -- trace progress info
     if not opt.quiet then
-        cprintf("${color.build.progress}" .. theme.get("text.build.progress_format") .. ":${clear} ", progress)
+        local progress_prefix = "${color.build.progress}" .. theme.get("text.build.progress_format") .. ":${clear} "
         if verbose then
-            cprint("${dim color.build.object}%scompiling.$(mode) %s", exists_ccache and "ccache " or "", sourcefile)
+            cprint(progress_prefix .. "${dim color.build.object}%scompiling.$(mode) %s", progress, exists_ccache and "ccache " or "", sourcefile)
         else
-            cprint("${color.build.object}%scompiling.$(mode) %s", exists_ccache and "ccache " or "", sourcefile)
+            cprint(progress_prefix .. "${color.build.object}%scompiling.$(mode) %s", progress, exists_ccache and "ccache " or "", sourcefile)
         end
     end
 
@@ -70,12 +73,11 @@ function _do_build_file(target, sourcefile, opt)
         print(compinst:compcmd(sourcefile, objectfile, {compflags = compflags}))
     end
 
-    -- flush io buffer to update progress info
-    io.flush()
-
     -- compile it 
     dependinfo.files = {}
-    assert(compinst:compile(sourcefile, objectfile, {dependinfo = dependinfo, compflags = compflags}))
+    if not option.get("dry-run") then
+        assert(compinst:compile(sourcefile, objectfile, {dependinfo = dependinfo, compflags = compflags}))
+    end
 
     -- update files and values to the dependent file
     dependinfo.values = depvalues
@@ -84,61 +86,35 @@ function _do_build_file(target, sourcefile, opt)
 end
 
 -- build object
-function _build_object(target, sourcebatch, index, opt)
-
-    -- get the object and source with the given index
-    local sourcefile = sourcebatch.sourcefiles[index]
-    local objectfile = sourcebatch.objectfiles[index]
-    local dependfile = sourcebatch.dependfiles[index]
-    local sourcekind = assert(sourcebatch.sourcekind, "%s: sourcekind not found!", sourcefile)
-
-    -- get progress range
-    local progress = assert(opt.progress, "no progress!")
-
-    -- calculate progress
-    local progress_now = progress.start + ((index - 1) * (progress.stop - progress.start)) / #sourcebatch.sourcefiles
-
-    -- init build option
-    local opt = table.join(opt, {objectfile = objectfile, dependfile = dependfile, sourcekind = sourcekind, progress = progress_now})
-
-    -- do before build
-    local before_build_file = target:script("build_file_before")
-    if before_build_file then
-        before_build_file(target, sourcefile, opt)
-    end
-
-    -- do build 
-    local on_build_file = target:script("build_file")
-    if on_build_file then
-        opt.origin = _do_build_file
-        on_build_file(target, sourcefile, opt)
-        opt.origin = nil
-    else
-        _do_build_file(target, sourcefile, opt)
-    end
-
-    -- do after build
-    local after_build_file = target:script("build_file_after")
-    if after_build_file then
-        after_build_file(target, sourcefile, opt)
+function _build_object(target, sourcefile, opt)
+    local script = target:script("build_file", _do_build_file)
+    if script then
+        script(target, sourcefile, opt)
     end
 end
 
 -- build the source files
-function main(target, sourcebatch, opt)
+function build(target, sourcebatch, opt)
+    for i = 1, #sourcebatch.sourcefiles do
+        local sourcefile = sourcebatch.sourcefiles[i]
+        opt.objectfile   = sourcebatch.objectfiles[i]
+        opt.dependfile   = sourcebatch.dependfiles[i]
+        opt.sourcekind   = assert(sourcebatch.sourcekind, "%s: sourcekind not found!", sourcefile)
+        _build_object(target, sourcefile, opt)
+    end
+end
 
-    -- get the max job count
-    local jobs = tonumber(option.get("jobs") or "4")
-
-    -- run build jobs for each source file 
-    local curdir = os.curdir()
-    process.runjobs(function (index)
-
-        -- force to set the current directory first because the other jobs maybe changed it
-        os.cd(curdir)
-
-        -- build object
-        _build_object(target, sourcebatch, index, opt)
-
-    end, #sourcebatch.sourcefiles, jobs)
+-- add batch jobs to build the source files
+function main(target, batchjobs, sourcebatch, opt)
+    local rootjob = opt.rootjob
+    for i = 1, #sourcebatch.sourcefiles do
+        local sourcefile = sourcebatch.sourcefiles[i]
+        local objectfile = sourcebatch.objectfiles[i]
+        local dependfile = sourcebatch.dependfiles[i]
+        local sourcekind = assert(sourcebatch.sourcekind, "%s: sourcekind not found!", sourcefile)
+        batchjobs:addjob(sourcefile, function (index, total)
+            local build_opt = table.join({objectfile = objectfile, dependfile = dependfile, sourcekind = sourcekind, progress = (index * 100) / total}, opt)
+            _build_object(target, sourcefile, build_opt)
+        end, rootjob)
+    end
 end

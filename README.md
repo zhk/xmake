@@ -35,7 +35,7 @@
     <a href="https://jq.qq.com/?_wv=1027&k=5hpwWFv">
       <img src="https://img.shields.io/badge/chat-on%20QQ-ff69b4.svg?style=flat-square" alt="QQ" />
     </a>
-    <a href="http://xmake.io/pages/donation.html#donate">
+    <a href="https://xmake.io/#/sponsor">
       <img src="https://img.shields.io/badge/donate-us-orange.svg?style=flat-square" alt="Donate" />
     </a>
   </div>
@@ -64,19 +64,19 @@ If you want to know more, please refer to:
 #### via curl
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/xmake-io/xmake/master/scripts/get.sh)
+bash <(curl -fsSL https://xmake.io/shget.text)
 ```
 
 #### via wget
 
 ```bash
-bash <(wget https://raw.githubusercontent.com/xmake-io/xmake/master/scripts/get.sh -O -)
+bash <(wget https://xmake.io/shget.text -O -)
 ```
 
 #### via powershell
 
-```bash
-Invoke-Expression (Invoke-Webrequest 'https://raw.githubusercontent.com/xmake-io/xmake/master/scripts/get.ps1' -UseBasicParsing).Content
+```powershell
+Invoke-Expression (Invoke-Webrequest 'https://xmake.io/psget.text' -UseBasicParsing).Content
 ```
 
 ## Simple description
@@ -122,6 +122,28 @@ $ xmake f --menu
 
 <img src="https://xmake.io/assets/img/index/menuconf.png" width="650px" />
 
+## Build as fast as ninja
+
+The test project: [xmake-core](https://github.com/xmake-io/xmake/tree/master/core)
+
+### Multi-task parallel compilation
+
+| buildsystem     | Termux (8core/-j12) | buildsystem      | MacOS (8core/-j12) |
+|-----            | ----                | ---              | ---                |
+|xmake            | 24.890s             | xmake            | 12.264s            |
+|ninja            | 25.682s             | ninja            | 11.327s            |
+|cmake(gen+make)  | 5.416s+28.473s      | cmake(gen+make)  | 1.203s+14.030s     |
+|cmake(gen+ninja) | 4.458s+24.842s      | cmake(gen+ninja) | 0.988s+11.644s     |
+
+### Single task compilation
+
+| buildsystem     | Termux (-j1)     | buildsystem      | MacOS (-j1)    |
+|-----            | ----             | ---              | ---            |
+|xmake            | 1m57.707s        | xmake            | 39.937s        |
+|ninja            | 1m52.845s        | ninja            | 38.995s        |
+|cmake(gen+make)  | 5.416s+2m10.539s | cmake(gen+make)  | 1.203s+41.737s |
+|cmake(gen+ninja) | 4.458s+1m54.868s | cmake(gen+ninja) | 0.988s+38.022s |
+
 ## Package management
 
 ### Download and build
@@ -136,11 +158,16 @@ $ xmake f --menu
 
 * Windows (x86, x64)
 * macOS (i386, x86_64)
-* Linux (i386, x86_64, cross-toolchains ...)
-* Android (armv5te, armv6, armv7-a, armv8-a, arm64-v8a)
+* Linux (i386, x86_64, cross-toolchains ..)
+* *BSD (i386, x86_64)
+* Android (x86, x86_64, armeabi, armeabi-v7a, arm64-v8a)
 * iOS (armv7, armv7s, arm64, i386, x86_64)
 * WatchOS (armv7k, i386)
+* MSYS (i386, x86_64)
 * MinGW (i386, x86_64)
+* Cygwin (i386, x86_64)
+* SDCC (stm8, mcs51, ..)
+* Cross (cross-toolchains ..)
 
 ## Supported Languages
 
@@ -164,62 +191,8 @@ $ xmake f --menu
 * WDK Driver (umdf/kmdf/wdm)
 * WinSDK Application
 * MFC Application
-
-## Builtin Plugins
-
-#### Generate IDE project file plugin（makefile, vs2002 - vs2019 .. ）
-
-```bash
-$ xmake project -k vs2017 -m "debug,release"
-$ xmake project -k cmakelists
-$ xmake project -k compile_commands
-```
-
-#### Macros script plugin
-
-```bash
-$ xmake m -b                        # start to record
-$ xmake f -p iphoneos -m debug
-$ xmake
-$ xmake f -p android --ndk=~/files/android-ndk-r16b
-$ xmake
-$ xmake m -e                        # stop to record
-$ xmake m .                         # playback commands
-```
-
-#### Run the custom lua script plugin
-
-```bash
-$ xmake l ./test.lua
-$ xmake l -c "print('hello xmake!')"
-$ xmake l lib.detect.find_tool gcc
-```
-
-#### Generate doxygen document plugin
-
-```bash
-$ xmake doxygen [srcdir]
-```
-
-## More Plugins
-
-Please download and install from the plugins repository [xmake-plugins](https://github.com/xmake-io/xmake-plugins).
-
-## IDE/Editor Integration
-
-* [xmake-vscode](https://github.com/xmake-io/xmake-vscode)
-
-<img src="https://raw.githubusercontent.com/tboox/xmake-vscode/master/res/problem.gif" width="650px" />
-
-* [xmake-sublime](https://github.com/xmake-io/xmake-sublime)
-
-<img src="https://raw.githubusercontent.com/tboox/xmake-sublime/master/res/problem.gif" width="650px" />
-
-* [xmake-idea](https://github.com/xmake-io/xmake-idea)
-
-<img src="https://raw.githubusercontent.com/tboox/xmake-idea/master/res/problem.gif" width="650px" />
-
-* [xmake.vim](https://github.com/luzhlon/xmake.vim) (third-party, thanks [@luzhlon](https://github.com/luzhlon))
+* iOS/MacOS Application
+* Framework and Bundle Program (iOS/MacOS)
 
 ## More Examples
 
@@ -236,37 +209,169 @@ target("console")
     end
 ```
 
-Download and use packages in [xmake-repo](https://github.com/xmake-io/xmake-repo):
-
-```lua
-add_requires("libuv master", "ffmpeg", "zlib 1.20.*")
-add_requires("tbox >1.6.1", {optional = true, debug = true})
-target("test")
-    set_kind("shared")
-    add_files("src/*.c")
-    add_packages("libuv", "ffmpeg", "tbox", "zlib")
-```
-
-Download and use packages in third-party package manager:
-
-```lua
-add_requires("brew::pcre2/libpcre2-8", {alias = "pcre2"})
-add_requires("conan::OpenSSL/1.0.2n@conan/stable", {alias = "openssl"}) 
-target("test")
-    set_kind("shared")
-    add_files("src/*.c")
-    add_packages("pcre2", "openssl")
-```
-
-Find and use local packages:
+Custom scripts:
 
 ```lua
 target("test")
-    set_kind("shared")
+    set_kind("binary")
     add_files("src/*.c")
-    on_load(function (target)
-        target:add(find_packages("zlib", "openssl", "brew::pcre2/libpcre2-8", "conan::OpenSSL/1.0.2n@conan/stable"))
+    after_build(function (target)
+        print("hello: %s", target:name())
+        os.exec("echo %s", target:targetfile())
     end)
+```
+
+Download and use packages in [xmake-repo](https://github.com/xmake-io/xmake-repo) or third-party repositories:
+
+```lua
+add_requires("tbox >1.6.1", "libuv master", "vcpkg::ffmpeg", "brew::pcre2/libpcre2-8")
+add_requires("conan::OpenSSL/1.0.2n@conan/stable", {alias = "openssl", optional = true, debug = true}) 
+target("test")
+    set_kind("binary")
+    add_files("src/*.c")
+    add_packages("tbox", "libuv", "vcpkg::ffmpeg", "brew::pcre2/libpcre2-8", "openssl")
+```
+
+Qt QuickApp Program:
+
+```lua
+target("test")
+    add_rules("qt.quickapp")
+    add_files("src/*.cpp")
+    add_files("src/qml.qrc")
+```
+
+Cuda Program:
+
+```lua
+target("test")
+    set_kind("binary")
+    add_files("src/*.cu")
+    add_cugencodes("native")
+    add_cugencodes("compute_30")
+```
+
+WDK/UMDF Driver Program:
+
+```lua
+target("echo")
+    add_rules("wdk.driver", "wdk.env.umdf")
+    add_files("driver/*.c") 
+    add_files("driver/*.inx")
+    add_includedirs("exe")
+
+target("app")
+    add_rules("wdk.binary", "wdk.env.umdf")
+    add_files("exe/*.cpp")
+```
+
+More wdk driver program examples (umdf/kmdf/wdm), please see [WDK Program Examples](https://xmake.io/#/guide/project_examples?id=wdk-driver-program)
+
+iOS/MacOS Application:
+
+```lua
+target("test")
+    add_rules("xcode.application")
+    add_files("src/*.m", "src/**.storyboard", "src/*.xcassets")
+    add_files("src/Info.plist")
+```
+
+Framework and Bundle Program (iOS/MacOS):
+
+```lua
+target("test")
+    add_rules("xcode.framework") -- or xcode.bundle
+    add_files("src/*.m")
+    add_files("src/Info.plist")
+```
+
+## Plugins
+
+#### Generate IDE project file plugin（makefile, vs2002 - vs2019 .. ）
+
+```bash
+$ xmake project -k vsxmake -m "debug;release" # New vsproj generator (Recommended)
+$ xmake project -k vs -m "debug;release"
+$ xmake project -k cmake
+$ xmake project -k ninja
+$ xmake project -k compile_commands
+```
+
+#### Run the custom lua script plugin
+
+```bash
+$ xmake l ./test.lua
+$ xmake l -c "print('hello xmake!')"
+$ xmake l lib.detect.find_tool gcc
+$ xmake l
+> print("hello xmake!")
+> {1, 2, 3}
+< { 
+    1,
+    2,
+    3 
+  }
+```
+
+More builtin plugins, please see: [Builtin plugins](https://xmake.io/#/plugin/builtin_plugins)
+
+Please download and install more other plugins from the plugins repository [xmake-plugins](https://github.com/xmake-io/xmake-plugins).
+
+## IDE/Editor Integration
+
+* [xmake-vscode](https://github.com/xmake-io/xmake-vscode)
+
+<img src="https://raw.githubusercontent.com/xmake-io/xmake-vscode/master/res/problem.gif" width="650px" />
+
+* [xmake-sublime](https://github.com/xmake-io/xmake-sublime)
+
+<img src="https://raw.githubusercontent.com/xmake-io/xmake-sublime/master/res/problem.gif" width="650px" />
+
+* [xmake-idea](https://github.com/xmake-io/xmake-idea)
+
+<img src="https://raw.githubusercontent.com/xmake-io/xmake-idea/master/res/problem.gif" width="650px" />
+
+* [xmake.vim](https://github.com/luzhlon/xmake.vim) (third-party, thanks [@luzhlon](https://github.com/luzhlon))
+
+### XMake Gradle Plugin (JNI)
+
+We can uses [xmake-gradle](https://github.com/xmake-io/xmake-gradle) plugin to compile JNI library in gradle.
+
+```
+plugins {
+  id 'org.tboox.gradle-xmake-plugin' version '1.0.6'
+}
+
+android {
+    externalNativeBuild {
+        xmake {
+            path "jni/xmake.lua"
+        }
+    }
+}
+```
+
+The `xmakeBuild` will be injected to `assemble` task automatically if the gradle-xmake-plugin has been applied.
+
+```console
+$ ./gradlew app:assembleDebug
+> Task :nativelib:xmakeConfigureForArm64
+> Task :nativelib:xmakeBuildForArm64
+>> xmake build
+[ 50%]: ccache compiling.debug nativelib.cc
+[ 75%]: linking.debug libnativelib.so
+[100%]: build ok!
+>> install artifacts to /Users/ruki/projects/personal/xmake-gradle/nativelib/libs/arm64-v8a
+> Task :nativelib:xmakeConfigureForArmv7
+> Task :nativelib:xmakeBuildForArmv7
+>> xmake build
+[ 50%]: ccache compiling.debug nativelib.cc
+[ 75%]: linking.debug libnativelib.so
+[100%]: build ok!
+>> install artifacts to /Users/ruki/projects/personal/xmake-gradle/nativelib/libs/armeabi-v7a
+> Task :nativelib:preBuild
+> Task :nativelib:assemble
+> Task :app:assembleDebug
 ```
 
 ## Project Examples
@@ -291,7 +396,7 @@ Some projects using xmake:
 * Community：[/r/tboox on reddit](https://www.reddit.com/r/tboox/)
 * ChatRoom：[Char on telegram](https://t.me/tbooxorg), [Chat on gitter](https://gitter.im/tboox/tboox?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 * Source Code：[Github](https://github.com/xmake-io/xmake), [Gitee](https://gitee.com/tboox/xmake)
-* QQ Group: 343118190(full), 662147501
+* QQ Group: 343118190(Technical Support), 662147501
 * Wechat Public: tboox-os
 
 ## Thanks

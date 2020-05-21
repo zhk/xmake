@@ -1,5 +1,6 @@
 import("core.base.socket")
 import("core.base.scheduler")
+import("core.base.bytes")
 
 function _session(addr, port)
     print("connect %s:%d ..", addr, port)
@@ -38,5 +39,4 @@ function main(count)
     for i = 1, count do
         scheduler.co_start(_session, "127.0.0.1", 9090)
     end
-    scheduler.runloop()
 end

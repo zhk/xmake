@@ -22,14 +22,18 @@
 import("core.base.semver")
 import("core.base.option")
 import("core.base.task")
+import("core.base.process")
 import("net.http")
 import("devel.git")
 import("devel.git.submodule")
 import("net.fasturl")
 import("core.base.privilege")
 import("privilege.sudo")
+import("private.async.runjobs")
 import("actions.require.impl.environment", {rootdir = os.programdir()})
 import("private.action.update.fetch_version")
+import("utils.archive")
+import("lib.detect.find_file")
 
 -- the installer filename for windows
 local win_installer_name = "xmake-installer.exe"
@@ -97,9 +101,7 @@ function _run_win_v(program, commands, admin)
     local temp_vbs = os.tmpfile() .. ".vbs"
     os.cp(sudo_vbs, temp_vbs)
     local params = table.join("/Nologo", temp_vbs, "W" .. (admin and "A" or "N") , program, commands)
-    local proc = process.openv("cscript", params)
-    if proc then proc:close() end
-    return proc ~= nil
+    process.openv("cscript", params, {detach = true}):close()
 end
 
 -- do uninstall
@@ -144,7 +146,8 @@ function _install(sourcedir)
         local installdir = is_host("windows") and os.programdir() or "~/.local/bin"
 
         -- trace
-        cprintf("\r${yellow}  => ${clear}installing to %s ..  ", installdir)
+        utils.clearline()
+        cprintf("${yellow}  => ${clear}installing to %s .. ", installdir)
         local ok = try
         {
             function ()
@@ -159,7 +162,6 @@ function _install(sourcedir)
                         local no_admin = os.trycp(path.join(os.programdir(), "scripts", "run.vbs"), testfile)
                         os.tryrm(testfile)
                         if no_admin then table.insert(params, 1, "/NOADMIN") end
-                        if not option.get("verbose") then table.insert(params, 1, "/S") end
                         -- need UAC?
                         if winos:version():gt("winxp") then
                             _run_win_v(win_installer_name, params, not no_admin)
@@ -170,7 +172,8 @@ function _install(sourcedir)
                         raise("the installer(%s) not found!", win_installer_name)
                     end
                 else
-                    os.vrun("./scripts/get.sh __local__")
+                    os.vrun("make build")
+                    process.openv("./scripts/get.sh", {"__local__", "__install_only__"}, {stdout = os.tmpfile(), stderr = os.tmpfile()}, {detach = true}):close()
                 end
                 return true
             end,
@@ -184,7 +187,8 @@ function _install(sourcedir)
 
         -- trace
         if ok then
-            cprint("\r${yellow}  => ${clear}install to %s .. ${green}ok    ", installdir)
+            utils.clearline()
+            cprint("${yellow}  => ${clear}install to %s .. ${color.success}${text.success}", installdir)
         else
             raise("install failed!")
         end
@@ -194,12 +198,7 @@ function _install(sourcedir)
     if option.get("verbose") then
         install_task()
     else
-        process.asyncrun(install_task)
-    end
-
-    -- show version
-    if not is_host("windows") then
-        os.exec("xmake --version")
+        runjobs("update/install", install_task, {showtips = true})
     end
 end
 
@@ -227,7 +226,8 @@ function _install_script(sourcedir)
                 local params = { "/c", script, os.programdir(),  source }
                 os.tryrm(script_original .. ".bak")
                 local access = os.trymv(script_original, script_original .. ".bak")
-                return _run_win_v("cmd", params, not access)
+                _run_win_v("cmd", params, not access)
+                return true
             else
                 local script = path.join(os.programdir(), "scripts", "update-script.sh")
                 return _sudo_v("sh", { script, os.programdir(), source })
@@ -248,6 +248,33 @@ function _install_script(sourcedir)
     end
 end
 
+function _check_repo(sourcedir)
+    -- this file will exists for long time
+    if not os.isfile(path.join(sourcedir, "xmake/core/_xmake_main.lua")) then
+        raise("invalid xmake repo, please check your input!")
+    end
+end
+
+function _check_win_installer(sourcedir)
+    local file = path.join(sourcedir, win_installer_name)
+    if not os.isfile(file) then
+        raise("installer not found at " .. sourcedir)
+    end
+
+    local fp = io.open(file, "rb")
+    local header = fp:read(math.min(1000, fp:size()))
+    fp:close()
+    if header:startswith("MZ") then
+        return
+    end
+    if header:find('\0', 1, true) or not option.get("verbose") then
+        raise("installer is broken")
+    else
+        -- may be a text file, print content for debug
+        raise("installer is broken: " .. header)
+    end
+end
+
 -- main
 function main()
 
@@ -258,7 +285,7 @@ function main()
         _uninstall()
 
         -- trace
-        cprint("${bright}uninstall ok!")
+        cprint("${color.success}uninstall ok!")
         return
     end
 
@@ -270,7 +297,7 @@ function main()
     local is_official = fetchinfo.is_official
     local mainurls    = fetchinfo.urls
     local version     = fetchinfo.version
-    if is_official and xmake.version():eq(version) then
+    if is_official and xmake.version():eq(version) and not option.get("force") then
         cprint("${bright}xmake %s has been installed!", version)
         return
     end
@@ -283,10 +310,11 @@ function main()
         end
 
         if version:find('.', 1, true) then
+            local winarch = os.arch() == "x64" and "win64" or "win32"
             mainurls = {format("https://ci.appveyor.com/api/projects/waruqi/xmake/artifacts/xmake-installer.exe?tag=%s&pr=false&job=Image%%3A+Visual+Studio+2017%%3B+Platform%%3A+%s", version, os.arch()),
-                        format("https://github.com/xmake-io/xmake/releases/download/%s/xmake-%s.exe", version, version),
-                        format("https://qcloud.coding.net/u/waruqi/p/xmake-releases/git/raw/master/xmake-%s.exe", version),
-                        format("https://gitlab.com/xmake-mirror/xmake-releases/raw/master/xmake-%s.exe", version)}
+                        format("https://github.com/xmake-io/xmake/releases/download/%s/xmake-%s.%s.exe", version, version, winarch),
+                        format("https://cdn.jsdelivr.net/gh/xmake-mirror/xmake-releases@%s/xmake-%s.%s.exe.zip", version, version, winarch),
+                        format("https://gitlab.com/xmake-mirror/xmake-releases/raw/%s/xmake-%s.%s.exe.zip", version, version, winarch)}
         else
             -- regard as a git branch, fetch from ci
             mainurls = {format("https://ci.appveyor.com/api/projects/waruqi/xmake/artifacts/xmake-installer.exe?branch=%s&pr=false&job=Image%%3A+Visual+Studio+2017%%3B+Platform%%3A+%s", version, os.arch())}
@@ -304,46 +332,53 @@ function main()
         cprint("update version ${green}%s${clear} from ${underline}%s${clear} ..", version, mainurls[1])
     end
 
-    -- the download task
-    local sourcedir = path.join(os.tmpdir(), "xmakesrc", version)
+    -- get the temporary source directory without ramdisk (maybe too large)
+    local sourcedir = path.join(os.tmpdir({ramdisk = false}), "xmakesrc", version)
     vprint("prepared to download to temp dir %s ..", sourcedir)
 
+    -- all user provided urls are considered as git url since check has been performed in fetch_version
+    local install_from_git = not is_official or git.checkurl(mainurls[1])
+
+    -- the download task
     local download_task = function ()
         for idx, url in ipairs(mainurls) do
-            cprintf("\r${yellow}  => ${clear}downloading %s ..  ", url)
+            utils.clearline()
+            cprintf("${yellow}  => ${clear}downloading %s .. ", url)
             local ok = try
             {
                 function ()
                     os.tryrm(sourcedir)
-                    -- all user provided urls are considered as git url since check has been performed in fetch_version
-                    if is_official and not git.checkurl(url) then
+                    if not install_from_git then
                         os.mkdir(sourcedir)
-                        http.download(url, path.join(sourcedir, win_installer_name))
-                    else
-                        if version:find('.', 1, true) then
-                            git.clone(url, {outputdir = sourcedir})
-                            git.checkout(version, {repodir = sourcedir})
-                            if not script_only then
-                                submodule.update({repodir = sourcedir, init = true, recursive = true})
+                        local installerfile = path.join(sourcedir, win_installer_name) 
+                        if url:endswith(".zip") then
+                            http.download(url, installerfile .. ".zip")
+                            archive.extract(installerfile .. ".zip", installerfile .. ".dir")
+                            local file = find_file("*.exe", installerfile .. ".dir")
+                            if file then
+                                os.cp(file, installerfile)
                             end
                         else
-                            git.clone(url, {depth = 1, recursive = not script_only, branch = version, outputdir = sourcedir})
+                            http.download(url, installerfile)
                         end
+                    else
+                        git.clone(url, {depth = 1, recurse_submodules = not script_only, branch = version, outputdir = sourcedir})
                     end
                     return true
                 end,
-                catch 
+                catch
                 {
                     function (errors)
                         vprint(errors)
                     end
                 }
             }
+            utils.clearline()
             if ok then
-                cprint("\r${yellow}  => ${clear}download %s .. ${color.success}${text.success}    ", url)
+                cprint("${yellow}  => ${clear}download %s .. ${color.success}${text.success}", url)
                 break
             else
-                cprint("\r${yellow}  => ${clear}download %s .. ${color.failure}${text.failure}    ", url)
+                cprint("${yellow}  => ${clear}download %s .. ${color.failure}${text.failure}", url)
             end
             if not ok and idx == #mainurls then
                 raise("download failed!")
@@ -355,11 +390,17 @@ function main()
     if option.get("verbose") then
         download_task()
     else
-        process.asyncrun(download_task)
+        runjobs("update/download", download_task, {showtips = true})
     end
 
     -- leave environment
     environment.leave()
+
+    if install_from_git then
+        _check_repo(sourcedir)
+    else
+        _check_win_installer(sourcedir)
+    end
 
     -- do install
     if script_only then

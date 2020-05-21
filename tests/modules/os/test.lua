@@ -60,3 +60,28 @@ function test_setenv(t)
     -- assert mclock
     t:require(os.mclock() >= tm)
 end
+
+function test_argv(t)
+    t:are_equal(os.argv(""), {})
+    t:are_equal(os.argv("aa bb cc"), {"aa", "bb", "cc"})
+    t:are_equal(os.argv("aa --bb=bbb -c"), {"aa", "--bb=bbb", "-c"})
+    t:are_equal(os.argv("\"aa bb cc\" dd"), {"aa bb cc", "dd"})
+    t:are_equal(os.argv("\"aa(bb)cc\" dd"), {"aa(bb)cc", "dd"})
+    t:are_equal(os.argv("aa\\bb/cc dd"), {"aa\\bb/cc", "dd"})
+    t:are_equal(os.argv("\"aa\\\\bb/cc dd\" ee"), {"aa\\bb/cc dd", "ee"})
+    t:are_equal(os.argv("\"aa\\\\bb/cc (dd)\" ee"), {"aa\\bb/cc (dd)", "ee"})
+    t:are_equal(os.argv("-D__prefix__=\\\"tbox\\\""), {"-D__prefix__=\"tbox\""})
+end
+
+function test_args(t)
+    t:are_equal(os.args({}), "")
+    t:are_equal(os.args({"aa", "bb", "cc"}), "aa bb cc")
+    t:are_equal(os.args({"aa", "--bb=bbb", "-c"}), "aa --bb=bbb -c")
+    t:are_equal(os.args({"aa bb cc", "dd"}), "\"aa bb cc\" dd")
+    t:are_equal(os.args({"aa(bb)cc", "dd"}), "\"aa(bb)cc\" dd")
+    t:are_equal(os.args({"aa\\bb/cc", "dd"}), "aa\\bb/cc dd")
+    t:are_equal(os.args({"aa\\bb/cc dd", "ee"}), "\"aa\\\\bb/cc dd\" ee")
+    t:are_equal(os.args({"aa\\bb/cc (dd)", "ee"}), "\"aa\\\\bb/cc (dd)\" ee")
+    t:are_equal(os.args("-D__prefix__=\"tbox\""), "-D__prefix__=\\\"tbox\\\"")
+    t:are_equal(os.args({"aa\\bb/cc", "dd"}, {escape = true}), "aa\\\\bb/cc dd")
+end

@@ -24,6 +24,9 @@ import("core.tool.compiler")
 -- init it
 function init(self)
     self:set("arflags", "cr")
+    if is_plat("cross") and is_subhost("windows") then
+        self:set("formats", { static = "$(name).lib" })
+    end
 end
 
 -- make the strip flag
@@ -52,7 +55,7 @@ function linkargv(self, objectfiles, targetkind, targetfile, flags, opt)
     -- too long arguments for windows? 
     if is_host("windows") then
         opt = opt or {}
-        local args = os.args(argv)
+        local args = os.args(argv, {escape = true})
         if #args > 1024 and not opt.rawargs then
             local argsfile = os.tmpfile(args) .. ".args.txt" 
             io.writefile(argsfile, args)

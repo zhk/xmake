@@ -26,6 +26,7 @@ import("core.project.config")
 import("core.base.global")
 import("core.project.project")
 import("core.platform.platform")
+import("core.platform.environment")
 import("private.action.clean.remove_files")
 
 -- do clean target 
@@ -93,7 +94,7 @@ function _on_clean_target(target)
     for _, r in ipairs(target:orderules()) do
         local on_clean = r:script("clean")
         if on_clean then
-            on_clean(target, {origin = _do_clean_target})
+            on_clean(target)
             done = true
         end
     end
@@ -155,7 +156,7 @@ function _clean_target(target)
     for i = 1, 5 do
         local script = scripts[i]
         if script ~= nil then
-            script(target, {origin = (i == 3 and _do_clean_target or nil)})
+            script(target)
         end
     end
 
@@ -206,8 +207,38 @@ function _clean(targetname)
     end
 end
 
+-- do clean for the third-party buildsystem
+function _try_clean()
+
+    -- load config
+    config.load()
+
+    -- get the buildsystem tool
+    local configfile = nil
+    local tool = nil
+    local trybuild = config.get("trybuild")
+    if trybuild then
+        tool = import("private.action.trybuild." .. trybuild, {try = true, anonymous = true})
+        if tool then
+            configfile = tool.detect()
+        end
+    end
+
+    -- try cleaning it
+    if configfile and tool and trybuild then
+        environment.enter("toolchains")
+        tool.clean()
+        environment.leave("toolchains")
+    end
+end
+
 -- main
 function main()
+
+    -- try cleaning it using third-party buildsystem if xmake.lua not exists
+    if not os.isfile(project.rootfile()) then
+        return _try_clean()
+    end
 
     -- lock the whole project
     project.lock()

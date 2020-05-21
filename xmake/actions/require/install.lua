@@ -26,6 +26,7 @@ import("lib.detect.find_tool")
 import("impl.package")
 import("impl.repository")
 import("impl.environment")
+import("impl.utils.get_requires")
 
 -- register the required local package
 function _register_required_package(instance, requireinfo)
@@ -55,7 +56,7 @@ function _register_required_package(instance, requireinfo)
         local hasenvs = false
         local installdir = instance:installdir()
         for name, values in pairs(instance:envs()) do
-            if name == "PATH" then
+            if name == "PATH" or name == "LD_LIBRARY_PATH" then
                 for _, value in ipairs(values) do
                     envs[name] = envs[name] or {}
                     if path.is_absolute(value) then
@@ -133,37 +134,17 @@ function _check_missing_packages(packages)
 end
 
 -- install packages
-function main(requires)
+function main(requires_raw)
 
     -- avoid to run this task repeatly
     if _g.installed then return end
     _g.installed = true
 
-    -- init requires
+    -- get requires and extra config
     local requires_extra = nil
-    if not requires then
-        requires, requires_extra = project.requires_str()
-    end
+    local requires, requires_extra = get_requires(requires_raw)
     if not requires or #requires == 0 then
         return 
-    end
-
-    -- get extra info
-    local extra =  option.get("extra")
-    local extrainfo = nil
-    if extra then
-        local tmpfile = os.tmpfile() .. ".lua"
-        io.writefile(tmpfile, "{" .. extra .. "}")
-        extrainfo = io.load(tmpfile)
-        os.tryrm(tmpfile)
-    end
-
-    -- force to use the given requires extra info
-    if extrainfo then
-        requires_extra = requires_extra or {}
-        for _, require_str in ipairs(requires) do
-            requires_extra[require_str] = extrainfo
-        end
     end
 
     -- enter environment 

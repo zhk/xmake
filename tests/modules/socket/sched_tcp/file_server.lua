@@ -15,7 +15,7 @@ end
 function _listen(addr, port, filepath)
 
     local sock = socket.bind(addr, port)
-    sock:listen(20)
+    sock:listen(100)
     print("%s: listening %s:%d ..", sock, addr, port) 
     while true do 
         local sock_client = sock:accept()
@@ -29,5 +29,4 @@ end
 
 function main(filepath)
     scheduler.co_start(_listen, "127.0.0.1", 9090, filepath)
-    scheduler.runloop()
 end
